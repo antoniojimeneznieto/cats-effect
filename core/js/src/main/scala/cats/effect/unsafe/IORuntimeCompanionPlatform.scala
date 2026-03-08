@@ -17,6 +17,8 @@
 package cats.effect.unsafe
 
 import scala.concurrent.ExecutionContext
+import cats.WasmMigration
+import scala.scalajs.LinkingInfo
 
 private[unsafe] abstract class IORuntimeCompanionPlatform { this: IORuntime.type =>
 
@@ -27,7 +29,11 @@ private[unsafe] abstract class IORuntimeCompanionPlatform { this: IORuntime.type
       batchSize: Int = 64,
       reportFailure: Throwable => Unit = _.printStackTrace()
   ): ExecutionContext =
-    new BatchingMacrotaskExecutor(batchSize, reportFailure)
+    LinkingInfo.linkTimeIf(LinkingInfo.moduleKind == LinkingInfo.ModuleKind.WasmComponent) {
+      (new WasiExecutor).asInstanceOf[ExecutionContext]
+    } {
+      new BatchingMacrotaskExecutor(batchSize, reportFailure)
+    }
 
   def defaultScheduler: Scheduler = Scheduler.createDefaultScheduler()._1
 

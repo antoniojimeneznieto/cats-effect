@@ -19,58 +19,81 @@ package unsafe
 
 import scala.concurrent.duration.{Duration, FiniteDuration}
 import scala.util.Try
+import cats.WasmMigration
 
 private[unsafe] abstract class IORuntimeConfigCompanionPlatform { this: IORuntimeConfig.type =>
   // TODO make the cancelation and auto-yield properties have saner names
   protected final val Default: IORuntimeConfig = {
-    val cancelationCheckThreshold = process
-      .env("CATS_EFFECT_CANCELATION_CHECK_THRESHOLD")
-      .flatMap(x => Try(x.toInt).toOption)
-      .getOrElse(512)
+    val cancelationCheckThreshold =
+      WasmMigration.forComponent(512) {
+        process
+          .env("CATS_EFFECT_CANCELATION_CHECK_THRESHOLD")
+          .flatMap(x => Try(x.toInt).toOption)
+          .getOrElse(512)
+      }
 
-    val autoYieldThreshold = process
-      .env("CATS_EFFECT_AUTO_YIELD_THRESHOLD_MULTIPLIER")
-      .flatMap(x => Try(x.toInt).toOption)
-      .getOrElse(2) * cancelationCheckThreshold
+    val autoYieldThreshold =
+      WasmMigration.forComponent(2 * cancelationCheckThreshold) {
+        process
+          .env("CATS_EFFECT_AUTO_YIELD_THRESHOLD_MULTIPLIER")
+          .flatMap(x => Try(x.toInt).toOption)
+          .getOrElse(2) * cancelationCheckThreshold
+      }
 
-    val enhancedExceptions = process
-      .env("CATS_EFFECT_TRACING_EXCEPTIONS_ENHANCED")
-      .flatMap(x => Try(x.toBoolean).toOption)
-      .getOrElse(DefaultEnhancedExceptions)
+    val enhancedExceptions =
+      WasmMigration.forComponent(DefaultEnhancedExceptions) {
+        process
+          .env("CATS_EFFECT_TRACING_EXCEPTIONS_ENHANCED")
+          .flatMap(x => Try(x.toBoolean).toOption)
+          .getOrElse(DefaultEnhancedExceptions)
+      }
 
-    val traceBufferSize = process
-      .env("CATS_EFFECT_TRACING_BUFFER_SIZE")
-      .flatMap(x => Try(x.toInt).toOption)
-      .getOrElse(DefaultTraceBufferSize)
+    val traceBufferSize =
+      WasmMigration.forComponent(DefaultTraceBufferSize) {
+        process
+          .env("CATS_EFFECT_TRACING_BUFFER_SIZE")
+          .flatMap(x => Try(x.toInt).toOption)
+          .getOrElse(DefaultTraceBufferSize)
+      }
 
-    val shutdownHookTimeout = process
-      .env("CATS_EFFECT_SHUTDOWN_HOOK_TIMEOUT")
-      .flatMap(x => Try(Duration(x)).toOption)
-      .getOrElse(DefaultShutdownHookTimeout)
+    val shutdownHookTimeout =
+      WasmMigration.forComponent(DefaultShutdownHookTimeout.asInstanceOf[scala.concurrent.duration.Duration]) {
+        process
+          .env("CATS_EFFECT_SHUTDOWN_HOOK_TIMEOUT")
+          .flatMap(x => Try(Duration(x)).toOption)
+          .getOrElse(DefaultShutdownHookTimeout)
+      }
 
-    val reportUnhandledFiberErrors = process
-      .env("CATS_EFFECT_REPORT_UNHANDLED_FIBER_ERRORS")
-      .flatMap(x => Try(x.toBoolean).toOption)
-      .getOrElse(DefaultReportUnhandledFiberErrors)
+    val reportUnhandledFiberErrors =
+      WasmMigration.forComponent(DefaultReportUnhandledFiberErrors) {
+        process
+          .env("CATS_EFFECT_REPORT_UNHANDLED_FIBER_ERRORS")
+          .flatMap(x => Try(x.toBoolean).toOption)
+          .getOrElse(DefaultReportUnhandledFiberErrors)
+      }
 
-    val cpuStarvationCheckInterval =
+
+    val cpuStarvationCheckInterval = WasmMigration.forComponent(DefaultCpuStarvationCheckInterval) {
       process
         .env("CATS_EFFECT_CPU_STARVATION_CHECK_INTERVAL")
         .map(Duration(_))
         .flatMap { d => Try(d.asInstanceOf[FiniteDuration]).toOption }
         .getOrElse(DefaultCpuStarvationCheckInterval)
+    }
 
-    val cpuStarvationCheckInitialDelay =
+    val cpuStarvationCheckInitialDelay = WasmMigration.forComponent(DefaultCpuStarvationCheckInitialDelay.asInstanceOf[scala.concurrent.duration.Duration]) {
       process
         .env("CATS_EFFECT_CPU_STARVATION_CHECK_INITIAL_DELAY")
         .map(Duration(_))
         .getOrElse(DefaultCpuStarvationCheckInitialDelay)
+    }
 
-    val cpuStarvationCheckThreshold =
+    val cpuStarvationCheckThreshold = WasmMigration.forComponent(DefaultCpuStarvationCheckThreshold) {
       process
         .env("CATS_EFFECT_CPU_STARVATION_CHECK_THRESHOLD")
         .flatMap(p => Try(p.toDouble).toOption)
         .getOrElse(DefaultCpuStarvationCheckThreshold)
+    }
 
     apply(
       cancelationCheckThreshold,

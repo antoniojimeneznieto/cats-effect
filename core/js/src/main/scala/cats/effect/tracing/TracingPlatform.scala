@@ -21,26 +21,42 @@ import cats.effect.kernel.Cont
 import scala.collection.mutable
 import scala.reflect.NameTransformer
 import scala.scalajs.{js, LinkingInfo}
+import scalajs.LinkingInfo.*
 
 private[tracing] abstract class TracingPlatform { self: Tracing.type =>
 
   private[this] val cache = mutable.Map.empty[Any, TracingEvent].withDefaultValue(null)
-  private[this] val function0Property =
-    js.Object.getOwnPropertyNames((() => ()).asInstanceOf[js.Object])(0)
+  private[this] val function0Property = 
+    linkTimeIf(LinkingInfo.moduleKind == ModuleKind.WasmComponent) {
+      "wasm unimplemented"
+    } {
+      js.Object.getOwnPropertyNames((() => ()).asInstanceOf[js.Object])(0)
+    }
   private[this] val function1Property =
-    js.Object.getOwnPropertyNames(((_: Unit) => ()).asInstanceOf[js.Object])(0)
+    linkTimeIf(LinkingInfo.moduleKind == ModuleKind.WasmComponent) {
+      "wasm unimplemented"
+    } {
+      js.Object.getOwnPropertyNames(((_: Unit) => ()).asInstanceOf[js.Object])(0)
+    }
 
   import TracingConstants._
 
   def calculateTracingEvent[A](f: Function0[A]): TracingEvent = {
-    calculateTracingEvent(
-      f.asInstanceOf[js.Dynamic].selectDynamic(function0Property).toString())
+    linkTimeIf(LinkingInfo.moduleKind == ModuleKind.WasmComponent) {
+      buildEvent()
+    } {
+      calculateTracingEvent(
+        f.asInstanceOf[js.Dynamic].selectDynamic(function0Property).toString())
+    }
   }
 
-  def calculateTracingEvent[A, B](f: Function1[A, B]): TracingEvent = {
-    calculateTracingEvent(
-      f.asInstanceOf[js.Dynamic].selectDynamic(function1Property).toString())
-  }
+  def calculateTracingEvent[A, B](f: Function1[A, B]): TracingEvent = 
+    linkTimeIf(LinkingInfo.moduleKind == ModuleKind.WasmComponent) {
+      buildEvent()
+    } {
+      calculateTracingEvent(
+        f.asInstanceOf[js.Dynamic].selectDynamic(function1Property).toString())
+    }
 
   // We could have a catch-all for non-functions, but explicitly enumerating makes sure we handle each case correctly
   def calculateTracingEvent[F[_], A, B](cont: Cont[F, A, B]): TracingEvent = {

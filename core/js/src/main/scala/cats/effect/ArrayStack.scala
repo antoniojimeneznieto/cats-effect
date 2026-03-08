@@ -17,8 +17,10 @@
 package cats.effect
 
 import scala.scalajs.js
+import scala.collection.mutable
+import scalajs.runtime
 
-private final class ArrayStack[A <: AnyRef](val buffer: js.Array[A]) extends AnyVal {
+private final class ArrayStack[A <: AnyRef](val buffer: mutable.Stack[A]) extends AnyVal {
 
   @inline def init(bound: Int): Unit = {
     val _ = bound
@@ -26,7 +28,7 @@ private final class ArrayStack[A <: AnyRef](val buffer: js.Array[A]) extends Any
   }
 
   @inline def push(a: A): Unit = {
-    buffer.push(a)
+    buffer.append(a)
     ()
   }
 
@@ -39,11 +41,12 @@ private final class ArrayStack[A <: AnyRef](val buffer: js.Array[A]) extends Any
   @inline def isEmpty(): Boolean = buffer.length == 0
 
   // to allow for external iteration
-  @inline def unsafeBuffer(): js.Array[A] = buffer
+  @inline def unsafeBuffer(): mutable.Stack[A] = buffer
+
   @inline def unsafeIndex(): Int = buffer.length
 
   @inline def invalidate(): Unit = {
-    buffer.length = 0 // javascript is crazy!
+    //buffer.size = 0 // javascript is crazy!
   }
 
 }
@@ -56,7 +59,7 @@ private object ArrayStack {
   }
 
   @inline def apply[A <: AnyRef](): ArrayStack[A] = {
-    new ArrayStack(new js.Array[A])
+    new ArrayStack(new mutable.Stack[A])
   }
 
 }

@@ -43,7 +43,7 @@ ThisBuild / git.gitUncommittedChanges := {
   }
 }
 
-ThisBuild / tlBaseVersion := "3.7"
+ThisBuild / version := "3.7-WASM"
 ThisBuild / tlUntaggedAreSnapshots := false
 
 ThisBuild / organization := "org.typelevel"
@@ -325,13 +325,13 @@ ThisBuild / autoAPIMappings := true
 
 ThisBuild / Test / testOptions += Tests.Argument("+l")
 
-val CatsVersion = "2.13.0"
-val CatsMtlVersion = "1.6.0"
-val ScalaCheckVersion = "1.19.0"
-val CoopVersion = "1.3.0"
-val MUnitVersion = "1.1.0"
-val MUnitScalaCheckVersion = "1.3.0"
-val DisciplineMUnitVersion = "2.0.0"
+val CatsVersion = "2.13-WASM"
+val CatsMtlVersion = "1.7-WASM"
+val ScalaCheckVersion = "1.19-WASM"
+val CoopVersion = "1.3-WASM"
+val MUnitVersion = "1.3.0-WASM"
+val MUnitScalaCheckVersion = "1.2.0-WASM"
+val DisciplineMUnitVersion = "2.0-WASM"
 
 val MacrotaskExecutorVersion = "1.1.1"
 
@@ -851,6 +851,7 @@ lazy val core = crossProject(JSPlatform, JVMPlatform, NativePlatform)
   )
   .jsSettings(
     libraryDependencies += "org.scala-js" %%% "scala-js-macrotask-executor" % MacrotaskExecutorVersion,
+
     mimaBinaryIssueFilters ++= {
       Seq(
         // introduced by #2857, when we properly turned on MiMa for Scala.js
@@ -1026,6 +1027,23 @@ lazy val tests: CrossProject = crossProject(JSPlatform, JVMPlatform, NativePlatf
   .nativeSettings(
     Compile / mainClass := Some("catseffect.examples.NativeRunner"),
     nativeTestSettings
+  )
+
+lazy val wasmTests = project
+  .in(file("wasmTests"))
+  .dependsOn(core.js)
+  .enablePlugins(ScalaJSPlugin)
+  .settings(
+    scalaJSLinkerConfig ~= { _
+      .withPrettyPrint(true)
+      .withExperimentalUseWebAssembly(true) // use the Wasm backend
+      .withModuleKind(ModuleKind.WasmComponent)  // required by the Wasm backend
+      .withWasmFeatures { _
+        .withWitWorld(Some("scala"))
+        .withWitDirectory(Some("wit"))
+        .withExceptionHandling(true)
+      }
+    }
   )
 
 def configureIOAppTests(p: Project): Project =

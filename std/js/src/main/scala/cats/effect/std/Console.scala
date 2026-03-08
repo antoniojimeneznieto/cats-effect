@@ -23,8 +23,14 @@ import cats.syntax.all._
 import scala.annotation.nowarn
 import scala.scalajs.js
 import scala.util.Try
+import scalajs.wasi
+import scalajs.LinkingInfo
 
 import java.nio.charset.Charset
+
+import scala.scalajs.wit.Ok
+import scala.scalajs.wit.Err
+import scala.collection.mutable.ArrayBuilder
 
 /**
  * Effect type agnostic `Console` with common methods to write to and read from the standard
@@ -91,20 +97,27 @@ object Console extends ConsoleCompanionCrossPlatform {
   /**
    * Constructs a `Console` instance for `F` data types that are [[cats.effect.kernel.Async]].
    */
-  def make[F[_]](implicit F: Async[F]): Console[F] = {
+  def make[F[_]](implicit F: Async[F]): Console[F] = 
+    LinkingInfo.linkTimeIf(LinkingInfo.moduleKind == LinkingInfo.ModuleKind.WasmComponent) {
+      val stdin = wasi.cli.stdin.getStdin()
+      val stdout = wasi.cli.stdout.getStdout()
+      val stderr = wasi.cli.stderr.getStderr()
 
-    val stdout = Try(js.Dynamic.global.process.stdout)
-      .toOption
-      .flatMap(Option(_))
-      .filterNot(js.isUndefined(_))
+      (new WasiConsole(stdin, stdout, stderr)).asInstanceOf[Console[F]]
+    } {
 
-    val stderr = Try(js.Dynamic.global.process.stderr)
-      .toOption
-      .flatMap(Option(_))
-      .filterNot(js.isUndefined(_))
+      val stdout = Try(js.Dynamic.global.process.stdout)
+        .toOption
+        .flatMap(Option(_))
+        .filterNot(js.isUndefined(_))
 
-    stdout.map2(stderr)(new NodeJSConsole(_, _)).getOrElse(new SyncConsole)
-  }
+      val stderr = Try(js.Dynamic.global.process.stderr)
+        .toOption
+        .flatMap(Option(_))
+        .filterNot(js.isUndefined(_))
+
+      stdout.map2(stderr)(new NodeJSConsole(_, _)).getOrElse(new SyncConsole)
+    }
 
   @deprecated("Retaining for bincompat", "3.4.0")
   private[std] def make[F[_]](implicit F: Sync[F]): Console[F] =
@@ -159,6 +172,48 @@ object Console extends ConsoleCompanionCrossPlatform {
       F.raiseError(
         new UnsupportedOperationException(
           "Not implemented for Scala.js. On Node.js consider using fs2.io.stdin."))
+  }
+
+  private final class WasiConsole[F[_]](
+      stdin: wasi.cli.stdin.InputStream,
+      stdout: wasi.cli.stdout.OutputStream,
+      stderr: wasi.cli.stderr.OutputStream
+    )(implicit F: Async[F]) extends Console[F] {
+
+    def write(stdout: wasi.cli.stdout.OutputStream, str: String): F[Unit] = {
+      F.blocking {
+        stdout.blockingWriteAndFlush(str.getBytes()) match {
+          case _: Ok[_] => ()
+          case _: Err[_] => throw new Exception("stdin.blocingWriteAndFlush returned err")
+        }
+      }
+    }
+
+    override def readLineWithCharset(charset: Charset): F[String] = {
+      @scala.annotation.tailrec
+      def go(acc: ArrayBuilder[Byte]): String = {
+        stdin.read(1) match {
+          case bytes: Ok[Array[Byte]] =>
+            val head = bytes.value(0)
+            if (head  === '\n')
+              acc.toString()
+            else
+              go(acc.addOne(head))
+          case err: Err[wasi.io.streams.StreamError] => throw new Exception(s"Stdin read failed because: ${err}")
+        }
+      }
+
+      F.blocking(go(ArrayBuilder.make))
+    }
+
+    override def print[A](a: A)(implicit S: Show[A]): F[Unit] = write(stdout, a.show)
+
+    override def println[A](a: A)(implicit S: Show[A]): F[Unit] = write(stdout, a.show + "\n")
+
+    override def error[A](a: A)(implicit S: Show[A]): F[Unit] = write(stderr, a.show)
+
+    override def errorln[A](a: A)(implicit S: Show[A]): F[Unit] = write(stderr, a.show + "\n")
+
   }
 
 }

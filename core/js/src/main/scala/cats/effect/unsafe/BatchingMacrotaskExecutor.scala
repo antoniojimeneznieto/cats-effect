@@ -25,6 +25,12 @@ import scala.collection.mutable
 import scala.concurrent.ExecutionContextExecutor
 import scala.scalajs.{js, LinkingInfo}
 
+private[effect] final class WasiExecutor extends ExecutionContextExecutor {
+  override def reportFailure(cause: Throwable): Unit = cause.printStackTrace()
+
+  override def execute(command: Runnable): Unit = command.run()
+}
+
 /**
  * An `ExecutionContext` that improves throughput by providing a method to `schedule` fibers to
  * execute in batches, instead of one task per event loop iteration. This optimization targets

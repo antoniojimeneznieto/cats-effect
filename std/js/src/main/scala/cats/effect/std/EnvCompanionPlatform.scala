@@ -22,6 +22,7 @@ import cats.effect.kernel.Sync
 import scala.collection.immutable.Iterable
 import scala.scalajs.js
 import scala.util.Try
+import scalajs.LinkingInfo.{linkTimeIf, moduleKind, ModuleKind}
 
 private[std] class EnvCompanionPlatform {
   private[std] final class SyncEnv[F[_]](implicit F: Sync[F]) extends Env[F] {
@@ -33,8 +34,12 @@ private[std] class EnvCompanionPlatform {
     def entries: F[Iterable[(String, String)]] =
       F.delay(processEnv.collect { case (name, value: String) => name -> value }.toList)
 
-    private def processEnv =
-      Try(js.Dynamic.global.process.env.asInstanceOf[js.Dictionary[Any]])
-        .getOrElse(js.Dictionary.empty)
+    private def processEnv: Map[String, Any] =
+      linkTimeIf(moduleKind == ModuleKind.WasmComponent) {
+        Map.empty[String, Any]
+      } {
+      Try(js.Dynamic.global.process.env.asInstanceOf[js.Dictionary[Any]].toMap[String, Any])
+        .getOrElse(Map.empty[String, Any])
+      }
   }
 }

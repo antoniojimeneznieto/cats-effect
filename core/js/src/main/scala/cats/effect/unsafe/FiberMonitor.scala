@@ -172,6 +172,10 @@ private[effect] object FiberMonitor {
    * Feature-tests for all the required, well, features :)
    */
   private[unsafe] def weakRefsAvailable: Boolean =
-    js.typeOf(js.Dynamic.global.WeakRef) != Undefined &&
-      js.typeOf(js.Dynamic.global.FinalizationRegistry) != Undefined
+    LinkingInfo.linkTimeIf(LinkingInfo.moduleKind == LinkingInfo.ModuleKind.WasmComponent) {
+      false
+    } {
+      js.typeOf(js.Dynamic.global.WeakRef) != Undefined &&
+        js.typeOf(js.Dynamic.global.FinalizationRegistry) != Undefined
+    }
 }

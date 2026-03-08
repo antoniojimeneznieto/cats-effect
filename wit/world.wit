@@ -1,0 +1,6 @@
+package scala:cats-effect;
+
+world scala {
+  export wasi:cli/run@0.2.0;
+  import wasi:cli/stderr@0.2.0;
+}

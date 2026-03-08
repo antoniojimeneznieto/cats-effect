@@ -33,7 +33,7 @@ private[unsafe] abstract class IORuntimeBuilderPlatform { self: IORuntimeBuilder
       computeShutdown()
       blockingShutdown()
       schedulerShutdown()
-      extraShutdownHooks.reverse.foreach(_())
+      //extraShutdownHooks.reverse.foreach(_())
     }
     val runtimeConfig = customConfig.getOrElse(IORuntimeConfig())
 
