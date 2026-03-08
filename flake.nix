@@ -15,6 +15,19 @@
           overlays = [ typelevel-nix.overlays.default ];
         };
 
+        wit-bindgen-scala = pkgs.rustPlatform.buildRustPackage {
+          pname = "wit-bindgen";
+          name = "wit-bindgen";
+          #phases = [ "buildPhase" "installPhase" ];
+          src = pkgs.fetchFromGitHub {
+            owner = "scala-wasm";
+            repo = "wit-bindgen";
+            rev = "4f740e9e767e0e1f50f87c708aa50a3970a519de";
+            hash = "sha256-WfAgCFkAoPwi+SDZZYhXzh5UKahwWT902KL+7Qi6yBo=";
+          };
+         cargoHash = "sha256-bAs+j5HJkJ5j6ZZBzfPDbMeu96c92VDbrIt+QKBPofU=";
+        };
+
         mkShell = jdk: pkgs.devshell.mkShell {
           imports = [ typelevel-nix.typelevelShell ];
           name = "cats-effect";
@@ -22,8 +35,15 @@
             jdk.package = jdk;
             nodejs.enable = true;
             native.enable = true;
-            nodejs.package = pkgs.nodejs-18_x;
+            nodejs.package = pkgs.nodejs_25;
           };
+          packages = with pkgs; [
+            wasm-tools
+            wasmtime
+            wkg
+            wac-cli
+            wit-bindgen-scala
+          ];
         };
       in
       rec {
