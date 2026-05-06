@@ -800,7 +800,7 @@ private final class IOFiber[A](
             state.wasFinalizing = finalizing
 
             if (isStackTracing) {
-              state.handle = monitor()
+              //state.handle = monitor()
               finalizers.push(IO {
                 state.handle.deregister()
                 ()
@@ -996,8 +996,8 @@ private final class IOFiber[A](
             resumeIO = cur.ioa
 
             if (isStackTracing) {
-              val handle = monitor()
-              objectState.push(handle)
+              //val handle = monitor()
+              //objectState.push(handle)
             }
             scheduleOnForeignEC(ec, this)
           }
@@ -1077,8 +1077,8 @@ private final class IOFiber[A](
     resumeIO = cur
 
     if (isStackTracing) {
-      val handle = monitor()
-      objectState.push(handle)
+      //val handle = monitor()
+      //objectState.push(handle)
     }
 
     val ec = runtime.blocking
