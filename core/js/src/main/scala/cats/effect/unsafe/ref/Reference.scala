@@ -29,7 +29,6 @@
 package cats.effect.unsafe.ref
 
 import scala.scalajs.js
-import cats.WasmMigration
 
 /* The JavaDoc says that the methods are concrete in `Reference`, and not
  * overridden in `WeakReference`. To mimic this setup, and since
@@ -39,9 +38,7 @@ import cats.WasmMigration
 private[unsafe] abstract class Reference[T] private[ref] (
     referent: T,
     queue: ReferenceQueue[? >: T]) {
-  private[this] var weakRef = WasmMigration.guard("weakRef") {
-    new js.WeakRef(referent)
-  }
+  private[this] var weakRef = new js.WeakRef(referent)
 
   var enqueued: Boolean = false
 
