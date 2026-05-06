@@ -18,17 +18,57 @@ package cats.effect
 
 import scala.scalajs.js
 import scala.collection.mutable
-import scalajs.runtime
+import scalajs.LinkingInfo.{linkTimeIf, moduleKind, ModuleKind}
 
-private final class ArrayStack[A <: AnyRef](val buffer: mutable.Stack[A]) extends AnyVal {
+private sealed trait ArrayStack[A <: AnyRef] extends Any {
 
   @inline def init(bound: Int): Unit = {
     val _ = bound
     ()
   }
 
+  @inline def push(a: A): Unit
+
+  @inline def pop(): A 
+
+  @inline def peek(): A
+
+  @inline def isEmpty(): Boolean
+
+  @inline def unsafeIndex(): Int
+
+  @inline def invalidate(): Unit
+
+}
+
+private final class WasmArrayStack[A <: AnyRef](val buffer: mutable.Stack[A]) extends AnyVal with ArrayStack[A] {
+
+  @inline override def push(a: A): Unit = {
+    buffer.push(a)
+    ()
+  }
+
+  @inline override def pop(): A = {
+    buffer.pop()
+  }
+
+  @inline override def peek(): A = buffer(buffer.length - 1)
+
+  @inline override def isEmpty(): Boolean = buffer.length == 0
+
+  // to allow for external iteration
+  @inline def unsafeBuffer(): mutable.Stack[A] = buffer
+
+  @inline override def unsafeIndex(): Int = buffer.length
+
+  @inline override def invalidate(): Unit = ()
+
+}
+
+private final class JSArrayStack[A <: AnyRef](val buffer: js.Array[A]) extends AnyVal with ArrayStack[A] {
+
   @inline def push(a: A): Unit = {
-    buffer.append(a)
+    buffer.push(a)
     ()
   }
 
@@ -41,15 +81,14 @@ private final class ArrayStack[A <: AnyRef](val buffer: mutable.Stack[A]) extend
   @inline def isEmpty(): Boolean = buffer.length == 0
 
   // to allow for external iteration
-  @inline def unsafeBuffer(): mutable.Stack[A] = buffer
-
+  @inline def unsafeBuffer(): js.Array[A] = buffer
   @inline def unsafeIndex(): Int = buffer.length
 
   @inline def invalidate(): Unit = {
-    //buffer.size = 0 // javascript is crazy!
+    buffer.length = 0 // javascript is crazy!
   }
-
 }
+
 
 private object ArrayStack {
 
@@ -58,8 +97,10 @@ private object ArrayStack {
     apply()
   }
 
-  @inline def apply[A <: AnyRef](): ArrayStack[A] = {
-    new ArrayStack(new mutable.Stack[A])
-  }
-
+  @inline def apply[A <: AnyRef](): ArrayStack[A] = 
+    linkTimeIf(moduleKind == ModuleKind.WasmComponent) {
+      new WasmArrayStack(new mutable.Stack[A]).asInstanceOf[ArrayStack[A]]
+    } {
+      new JSArrayStack(new js.Array[A])
+    }
 }
