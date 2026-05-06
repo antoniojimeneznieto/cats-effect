@@ -18,6 +18,7 @@ package cats.effect
 
 private object Platform {
   final val isJs = false
+  final val isWasi = false
   final val isJvm = false
   final val isNative = true
 
