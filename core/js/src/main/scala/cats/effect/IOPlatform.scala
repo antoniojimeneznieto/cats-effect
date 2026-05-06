@@ -18,7 +18,6 @@ package cats.effect
 
 import scala.concurrent.Future
 import scala.scalajs.js
-import scala.scalajs.wasi
 
 abstract private[effect] class IOPlatform[+A] { self: IO[A] =>
 
@@ -83,12 +82,5 @@ abstract private[effect] class IOPlatform[+A] { self: IO[A] =>
       case Left(t) => js.Promise.reject(t)
       case Right(Left(ioa)) => ioa.unsafeToPromise()
       case Right(Right(a)) => js.Promise.resolve[A](a)
-    }
-
-  def unsafeRunSyncWasi()(implicit runtime: unsafe.IORuntime): Either[Throwable, A] =
-    self.syncStep(runtime.config.autoYieldThreshold).attempt.unsafeRunSync() match {
-      case Left(t) => Left(t)
-      case Right(Left(ioa)) => ioa.unsafeRunSyncWasi()
-      case Right(Right(a)) => Right(a)
     }
 }
