@@ -17,8 +17,8 @@
 package cats.effect.unsafe
 
 import scala.concurrent.ExecutionContext
-import cats.WasmMigration
 import scala.scalajs.LinkingInfo
+import scala.scalajs.LinkingInfo.{linkTimeIf, ModuleKind, moduleKind}
 
 private[unsafe] abstract class IORuntimeCompanionPlatform { this: IORuntime.type =>
 
@@ -30,7 +30,7 @@ private[unsafe] abstract class IORuntimeCompanionPlatform { this: IORuntime.type
       reportFailure: Throwable => Unit = _.printStackTrace()
   ): ExecutionContext =
     LinkingInfo.linkTimeIf(LinkingInfo.moduleKind == LinkingInfo.ModuleKind.WasmComponent) {
-      (new WasiExecutor).asInstanceOf[ExecutionContext]
+      (new WasiPollingExecutor).asInstanceOf[ExecutionContext]
     } {
       new BatchingMacrotaskExecutor(batchSize, reportFailure)
     }
@@ -53,11 +53,18 @@ private[unsafe] abstract class IORuntimeCompanionPlatform { this: IORuntime.type
 
   def global: IORuntime = {
     if (_global == null) {
+      val (ec, sc) = linkTimeIf(moduleKind == ModuleKind.WasmComponent) {
+        val we = new WasiPollingExecutor
+        (we.asInstanceOf[ExecutionContext], we.asInstanceOf[Scheduler])
+      } {
+        (defaultComputeExecutionContext, defaultScheduler)
+      }
+
       installGlobal {
         IORuntime(
-          defaultComputeExecutionContext,
-          defaultComputeExecutionContext,
-          defaultScheduler,
+          ec,
+          ec,
+          sc,
           () => resetGlobal(),
           IORuntimeConfig())
       }

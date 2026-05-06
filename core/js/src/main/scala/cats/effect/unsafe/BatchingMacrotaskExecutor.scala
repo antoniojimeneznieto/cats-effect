@@ -24,12 +24,8 @@ import org.scalajs.macrotaskexecutor.MacrotaskExecutor
 import scala.collection.mutable
 import scala.concurrent.ExecutionContextExecutor
 import scala.scalajs.{js, LinkingInfo}
+import scala.scalajs.LinkingInfo.{linkTimeIf, moduleKind, ModuleKind}
 
-private[effect] final class WasiExecutor extends ExecutionContextExecutor {
-  override def reportFailure(cause: Throwable): Unit = cause.printStackTrace()
-
-  override def execute(command: Runnable): Unit = command.run()
-}
 
 /**
  * An `ExecutionContext` that improves throughput by providing a method to `schedule` fibers to
@@ -97,17 +93,20 @@ private[effect] final class BatchingMacrotaskExecutor(
    * Schedule the `fiber` for the next available batch. This is often the currently executing
    * batch.
    */
-  def schedule(fiber: IOFiber[?]): Unit = {
-    fibers.offer(fiber)
+  def schedule(fiber: IOFiber[?]): Unit =
+    // Reduce to unit on WASI builds as we cannot check for moduleKind in shared IOFiber#scheduleFiber 
+    // impl. Perhaps this check should be moved to some other layer?
+    linkTimeIf(moduleKind == ModuleKind.WasmComponent)(()) {
+      fibers.offer(fiber)
 
-    if (needsReschedule) {
-      needsReschedule = false
-      // start executing the batch immediately after the currently running task suspends
-      // this is safe b/c `needsReschedule` is set to `true` only upon yielding to the event loop
-      queueMicrotask(executeBatchTaskJSFunction)
-      ()
+      if (needsReschedule) {
+        needsReschedule = false
+        // start executing the batch immediately after the currently running task suspends
+        // this is safe b/c `needsReschedule` is set to `true` only upon yielding to the event loop
+        queueMicrotask(executeBatchTaskJSFunction)
+        ()
+      }
     }
-  }
 
   def reportFailure(t: Throwable): Unit = reportFailure0(t)
 

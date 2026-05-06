@@ -22,7 +22,6 @@ import scala.scalajs.js.timers
 import scala.util.Try
 import cats.WasmMigration
 import scala.scalajs.LinkingInfo
-import scalajs.wasi
 
 private[unsafe] abstract class SchedulerCompanionPlatform { this: Scheduler.type =>
   private[this] val maxTimeout = Int.MaxValue.millis
@@ -32,21 +31,13 @@ private[unsafe] abstract class SchedulerCompanionPlatform { this: Scheduler.type
       new Scheduler {
 
         def sleep(delay: FiniteDuration, task: Runnable): Runnable =
-          LinkingInfo.linkTimeIf(LinkingInfo.moduleKind == LinkingInfo.ModuleKind.WasmComponent) {
-            val pollable = wasi.clocks.monotonic_clock.subscribeDuration(delay.toNanos)
-            pollable.block()
-            task.run()
-            val noop: Runnable = () => ()
-            noop
-          } {
-            if (delay <= maxTimeout) {
-              val handle = timers.setTimeout(delay)(task.run())
-              mkCancelRunnable(handle)
-            } else {
-              var cancel: Runnable = () => ()
-              cancel = sleep(maxTimeout, () => cancel = sleep(delay - maxTimeout, task))
-              () => cancel.run()
-            }
+          if (delay <= maxTimeout) {
+            val handle = timers.setTimeout(delay)(task.run())
+            mkCancelRunnable(handle)
+          } else {
+            var cancel: Runnable = () => ()
+            cancel = sleep(maxTimeout, () => cancel = sleep(delay - maxTimeout, task))
+            () => cancel.run()
           }
 
         def nowMillis() = System.currentTimeMillis()

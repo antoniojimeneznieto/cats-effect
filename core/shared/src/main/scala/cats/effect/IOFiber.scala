@@ -1351,6 +1351,8 @@ private final class IOFiber[A](
       } else {
         scheduleOnForeignEC(ec, fiber)
       }
+    } else if (Platform.isWasi) {
+      scheduleOnForeignEC(ec, fiber)
     } else if (Platform.isJs) {
       if (ec.isInstanceOf[BatchingMacrotaskExecutor]) {
         val bmte = ec.asInstanceOf[BatchingMacrotaskExecutor]

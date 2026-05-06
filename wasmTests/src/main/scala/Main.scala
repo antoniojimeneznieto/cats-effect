@@ -6,25 +6,26 @@ import componentmodel.exports.wasi.cli.Run
 import scala.scalajs.wit
 
 import cats.implicits.*
-import cats.data.Chain
+import cats.effect.unsafe.WasiPollingExecutor
+
+import scala.concurrent.duration.*
 
 object Main {
-  val x = Resource.make[IO, Int](IO(5))(x => IO.println(s"releasing ${x}"))
-
-  def run: IO[Unit] = {
-    val words = Chain("Hiiii", "from", "Wasm/WASI")
-    val joined = words.intercalate(" ") + "!"
-
-    x.use { num =>
-      for {
-        start <- IO.monotonic
-        _     <- IO.println(joined)
-        _     <- IO.println(s"got $num")
-        end   <- IO.monotonic
-        _     <- IO.println(s"time difference ${end - start}")
-      } yield ()
-    }
-  }
+  def run: IO[Unit] = for {
+    _ <- (
+      IO.sleep(3.seconds) >>
+        IO.println("first task") >>
+        IO.sleep(5.seconds) >>
+        IO.println("first task part 2")
+    ).start
+    _ <- IO.println("sequential 1")
+    _ <- (IO.sleep(2.seconds) >> IO.println("second task")).start
+    _ <- IO.println("sequential 2")
+    _ <- (IO.sleep(5.seconds) >> IO.println("third task")).start
+    _ <- IO.race(
+      IO.sleep(3.seconds) >> IO.println("raced 3s"),
+      IO.sleep(2.seconds) >> IO.println("raced 2s"))
+  } yield ()
 }
 
 @wit.annotation.WitImplementation
@@ -32,11 +33,12 @@ object Runner extends Run {
   def run(): wit.Result[Unit, Unit] = {
     import cats.effect.unsafe.implicits.global
 
-    Main.run.unsafeRunSyncWasi() match {
-      case Left(e) =>
+    try {
+      Main.run.unsafeRunAndForget()
+      global.blocking.asInstanceOf[WasiPollingExecutor].loop()
+    } catch {
+      case e: Throwable =>
         e.printStackTrace()
-        wit.Err(())
-      case Right(_) => wit.Ok(())
     }
 
     wit.Ok(())
