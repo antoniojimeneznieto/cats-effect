@@ -17,13 +17,39 @@
 package cats.effect
 
 import scala.scalajs.js
+import scala.collection.mutable
+import scala.scalajs.LinkingInfo.{linkTimeIf, ModuleKind, moduleKind}
 
 import CallbackStack.Handle
 
-private trait CallbackStack[A] extends js.Object
+private trait CallbackStack[A]
+private final class JSCallbackStack[A](val arr: js.Array[A => Unit]) extends CallbackStack[A]
+private final class WasiCallbackStack[A](val stack: mutable.Stack[A => Unit]) extends CallbackStack[A]
 
-private final class CallbackStackOps[A](private val callbacks: js.Array[A => Unit])
-    extends AnyVal {
+private trait CallbackStackOps[A] extends Any {
+  @inline def push(next: A => Unit): Handle[A] 
+
+  @inline def unsafeSetCallback(cb: A => Unit): Unit 
+
+  /**
+   * Invokes *all* non-null callbacks in the queue, starting with the current one. Returns true
+   * iff *any* callbacks were invoked.
+   */
+  @inline def apply(oc: A): Boolean
+
+  /**
+   * Removes the callback referenced by a handle. Returns `true` if the data structure was
+   * cleaned up immediately, `false` if a subsequent call to [[pack]] is required.
+   */
+  @inline def clearHandle(handle: Handle[A]): Boolean
+
+  @inline def clear(): Unit
+
+  @inline def pack(bound: Int): Int
+}
+
+private final class JSCallbackStackOps[A](private val callbacks: js.Array[A => Unit])
+    extends AnyVal with CallbackStackOps[A] {
 
   @inline def push(next: A => Unit): Handle[A] = {
     callbacks.push(next)
@@ -65,12 +91,60 @@ private final class CallbackStackOps[A](private val callbacks: js.Array[A => Uni
     bound - bound // aka 0, but so bound is not unused ...
 }
 
+private final class WasiCallbackStackOps[A](private val callbacks: mutable.Stack[A => Unit])
+    extends AnyVal with CallbackStackOps[A] {
+
+  @inline def push(next: A => Unit): Handle[A] = {
+    callbacks.push(next)
+    callbacks.length - 1
+  }
+
+  @inline def unsafeSetCallback(cb: A => Unit): Unit = {
+    callbacks(callbacks.length - 1) = cb
+  }
+
+  /**
+   * Invokes *all* non-null callbacks in the queue, starting with the current one. Returns true
+   * iff *any* callbacks were invoked.
+   */
+  @inline def apply(oc: A): Boolean =
+    callbacks
+      .foldRight(false)( // skips deleted indices, but there can still be nulls
+        (cb: A => Unit, acc: Boolean) =>
+          if (cb ne null) { cb(oc); true }
+          else acc,
+      )
+
+  /**
+   * Removes the callback referenced by a handle. Returns `true` if the data structure was
+   * cleaned up immediately, `false` if a subsequent call to [[pack]] is required.
+   */
+  @inline def clearHandle(handle: Handle[A]): Boolean = {
+    callbacks.remove(handle, 1)
+    true
+  }
+
+  @inline def clear(): Unit = ()
+
+  @inline def pack(bound: Int): Int =
+    bound - bound // aka 0, but so bound is not unused ...
+}
+
 private object CallbackStack {
   @inline def of[A](cb: A => Unit): CallbackStack[A] =
-    js.Array(cb).asInstanceOf[CallbackStack[A]]
+    linkTimeIf(moduleKind == ModuleKind.WasmComponent) {
+      new WasiCallbackStack(mutable.Stack[A => Unit](cb)).asInstanceOf[CallbackStack[A]]
+    } {
+      js.Array(cb).asInstanceOf[CallbackStack[A]]
+      new JSCallbackStack(js.Array(cb)).asInstanceOf[CallbackStack[A]]
+    }
 
   @inline implicit def ops[A](stack: CallbackStack[A]): CallbackStackOps[A] =
-    new CallbackStackOps(stack.asInstanceOf[js.Array[A => Unit]])
+    linkTimeIf(moduleKind == ModuleKind.WasmComponent) {
+      new WasiCallbackStackOps(stack.asInstanceOf[WasiCallbackStack[A]].stack).asInstanceOf[CallbackStackOps[A]]
+    } {
+      new JSCallbackStackOps(stack.asInstanceOf[JSCallbackStack[A]].arr)
+    }
 
   type Handle[A] = Int
 }
