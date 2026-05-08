@@ -85,8 +85,8 @@ private[effect] final class WasiPollingExecutor extends ExecutionContextExecutor
   }
 
   override def execute(command: Runnable): Unit = {
-    scheduleIfNeeded()
     executeQueue.addLast(command)
+    scheduleIfNeeded()
   }
 
   def sleep(delay: FiniteDuration, command: Runnable): Runnable = {
