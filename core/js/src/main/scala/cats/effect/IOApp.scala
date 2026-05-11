@@ -19,9 +19,12 @@ package cats.effect
 import cats.effect.metrics.CpuStarvationWarningMetrics
 import cats.effect.std.Console
 import cats.effect.tracing.TracingConstants._
+import cats.effect.unsafe.WasiPollingExecutor
+import cats.effect.unsafe.Scheduler
 
 import scala.concurrent.CancellationException
 import scala.concurrent.duration._
+import scala.concurrent.ExecutionContext
 import scala.scalajs.{js, LinkingInfo}
 import scala.util.Try
 
@@ -201,109 +204,147 @@ trait IOApp {
    */
   def run(args: List[String]): IO[ExitCode]
 
-  final def main(args: Array[String]): Unit = {
-    val installed = if (runtime == null) {
+  import scala.scalajs.LinkingInfo.{linkTimeIf, moduleKind, ModuleKind}
+  final def main(args: Array[String]): Unit = 
+    linkTimeIf(moduleKind == ModuleKind.WasmComponent) {
       import unsafe.IORuntime
+      val res = IORuntime.installGlobal {
+          val we = new WasiPollingExecutor
+          val scheduler = we.asInstanceOf[Scheduler]
+          val executor = we.asInstanceOf[ExecutionContext]
 
-      val installed = IORuntime installGlobal {
-        val compute = IORuntime.createBatchingMacrotaskExecutor(reportFailure = t =>
-          reportFailure(t).unsafeRunAndForgetWithoutCallback()(runtime))
-
-        IORuntime(
-          compute,
-          compute,
-          IORuntime.defaultScheduler,
-          () => IORuntime.resetGlobal(),
-          runtimeConfig)
+          IORuntime(
+            executor,
+            executor,
+            scheduler,
+            () => IORuntime.resetGlobal(),
+            runtimeConfig)
       }
 
       _runtime = IORuntime.global
 
-      installed
-    } else {
-      unsafe.IORuntime.installGlobal(runtime)
-    }
+      import scala.scalajs.wasi
+      import scala.scalajs.wit
 
-    if (!installed) {
-      System
-        .err
-        .println(
-          "WARNING: Cats Effect global runtime already initialized; custom configurations will be ignored")
-    }
+      run(args.toList).unsafeRunFiber(
+          {
+            println("cancelled")
+            wasi.cli.exit.exit(wit.Err(()))
+          },
+          e => {
+            e.printStackTrace()
+            wasi.cli.exit.exit(wit.Err(()))
+            throw e
+          },
+          c => {
+            println("completed")
+            wasi.cli.exit.exit(wit.Ok(()))
+          }
+        )(runtime)
+      ()
+    } {
+      val installed = if (runtime == null) {
+        import unsafe.IORuntime
 
-    if (LinkingInfo.developmentMode && isStackTracing) {
-      val listener: js.Function0[Unit] = () =>
-        runtime.fiberMonitor.printLiveFiberSnapshot(System.err.print(_))
-      process.on("SIGUSR2", listener)
-      process.on("SIGINFO", listener)
-    }
+        val installed = IORuntime installGlobal {
+          val compute = IORuntime.createBatchingMacrotaskExecutor(reportFailure = t =>
+            reportFailure(t).unsafeRunAndForgetWithoutCallback()(runtime))
 
-    // An infinite heartbeat to keep main alive.  This is similar to
-    // `IO.never`, except `IO.never` doesn't schedule any tasks and is
-    // insufficient to keep main alive.  The tick is fast enough that
-    // it isn't silently discarded, as longer ticks are, but slow
-    // enough that we don't interrupt often.  1 hour was chosen
-    // empirically.
-    lazy val keepAlive: IO[Nothing] =
-      IO.sleep(1.hour) >> keepAlive
+          IORuntime(
+            compute,
+            compute,
+            IORuntime.defaultScheduler,
+            () => IORuntime.resetGlobal(),
+            runtimeConfig)
+        }
 
-    val argList = process.argv.getOrElse(args.toList)
+        _runtime = IORuntime.global
 
-    // Store the default process.exit function, if it exists
-    val hardExit: Int => Unit =
-      Try(js.Dynamic.global.process.exit.asInstanceOf[js.Function1[Int, Unit]])
-        // we got *something*, but we don't know what it is really. so wrap in a Try
-        .map(f => (i: Int) => { Try(f(i)); () })
-        .getOrElse((_: Int) => ())
-
-    var cancelCode = 1 // So this can be updated by external cancellation
-    val fiber = Spawn[IO]
-      .raceOutcome[ExitCode, Nothing](
-        CpuStarvationCheck
-          .run(runtimeConfig, runtime.metrics.cpuStarvationSampler, onCpuStarvationWarn)
-          .background
-          .surround(run(argList)),
-        keepAlive)
-      .flatMap {
-        case Left(Outcome.Canceled()) =>
-          IO.raiseError(new CancellationException("IOApp main fiber was canceled"))
-        case Left(Outcome.Errored(t)) => IO.raiseError(t)
-        case Left(Outcome.Succeeded(code)) => code
-        case Right(Outcome.Errored(t)) => IO.raiseError(t)
-        case Right(_) => sys.error("impossible")
-      }
-      .unsafeRunFiber(
-        hardExit(cancelCode),
-        t => {
-          t.printStackTrace()
-          hardExit(1)
-          throw t // For runtimes where hardExit is a no-op
-        },
-        c => hardExit(c.code)
-      )(runtime)
-
-    def gracefulExit(code: Int): Unit = {
-      // Optionally setup a timeout to hard exit
-      runtime.config.shutdownHookTimeout match {
-        case Duration.Zero =>
-          hardExit(code)
-          None
-        case fd: FiniteDuration =>
-          Some(js.timers.setTimeout(fd)(hardExit(code)))
-        case _ =>
-          None
+        installed
+      } else {
+        unsafe.IORuntime.installGlobal(runtime)
       }
 
-      // Report the exit code before cancelling, b/c the fiber will exit itself on cancel
-      cancelCode = code
-      fiber.cancel.unsafeRunAndForget()(runtime)
-    }
+      if (!installed) {
+        System
+          .err
+          .println(
+            "WARNING: Cats Effect global runtime already initialized; custom configurations will be ignored")
+      }
 
-    // Override it with one that cancels the fiber instead (if process exists)
-    Try(js.Dynamic.global.process.exit = gracefulExit(_))
-    process.on("SIGTERM", () => gracefulExit(143))
-    process.on("SIGINT", () => gracefulExit(130))
-  }
+      if (LinkingInfo.developmentMode && isStackTracing) {
+        val listener: js.Function0[Unit] = () =>
+          runtime.fiberMonitor.printLiveFiberSnapshot(System.err.print(_))
+        process.on("SIGUSR2", listener)
+        process.on("SIGINFO", listener)
+      }
+
+      // An infinite heartbeat to keep main alive.  This is similar to
+      // `IO.never`, except `IO.never` doesn't schedule any tasks and is
+      // insufficient to keep main alive.  The tick is fast enough that
+      // it isn't silently discarded, as longer ticks are, but slow
+      // enough that we don't interrupt often.  1 hour was chosen
+      // empirically.
+      lazy val keepAlive: IO[Nothing] =
+        IO.sleep(1.hour) >> keepAlive
+
+      val argList = process.argv.getOrElse(args.toList)
+
+      // Store the default process.exit function, if it exists
+      val hardExit: Int => Unit =
+        Try(js.Dynamic.global.process.exit.asInstanceOf[js.Function1[Int, Unit]])
+          // we got *something*, but we don't know what it is really. so wrap in a Try
+          .map(f => (i: Int) => { Try(f(i)); () })
+          .getOrElse((_: Int) => ())
+
+      var cancelCode = 1 // So this can be updated by external cancellation
+      val fiber = Spawn[IO]
+        .raceOutcome[ExitCode, Nothing](
+          CpuStarvationCheck
+            .run(runtimeConfig, runtime.metrics.cpuStarvationSampler, onCpuStarvationWarn)
+            .background
+            .surround(run(argList)),
+          keepAlive)
+        .flatMap {
+          case Left(Outcome.Canceled()) =>
+            IO.raiseError(new CancellationException("IOApp main fiber was canceled"))
+          case Left(Outcome.Errored(t)) => IO.raiseError(t)
+          case Left(Outcome.Succeeded(code)) => code
+          case Right(Outcome.Errored(t)) => IO.raiseError(t)
+          case Right(_) => sys.error("impossible")
+        }
+        .unsafeRunFiber(
+          hardExit(cancelCode),
+          t => {
+            t.printStackTrace()
+            hardExit(1)
+            throw t // For runtimes where hardExit is a no-op
+          },
+          c => hardExit(c.code)
+        )(runtime)
+
+      def gracefulExit(code: Int): Unit = {
+        // Optionally setup a timeout to hard exit
+        runtime.config.shutdownHookTimeout match {
+          case Duration.Zero =>
+            hardExit(code)
+            None
+          case fd: FiniteDuration =>
+            Some(js.timers.setTimeout(fd)(hardExit(code)))
+          case _ =>
+            None
+        }
+
+        // Report the exit code before cancelling, b/c the fiber will exit itself on cancel
+        cancelCode = code
+        fiber.cancel.unsafeRunAndForget()(runtime)
+      }
+
+      // Override it with one that cancels the fiber instead (if process exists)
+      Try(js.Dynamic.global.process.exit = gracefulExit(_))
+      process.on("SIGTERM", () => gracefulExit(143))
+      process.on("SIGINT", () => gracefulExit(130))
+    }
 
 }
 
