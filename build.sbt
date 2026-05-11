@@ -1,3 +1,4 @@
+import sbtcrossproject.CrossProjectMacros
 /*
  * Copyright 2020-2025 Typelevel
  *
@@ -22,6 +23,7 @@ import org.openqa.selenium.chrome.ChromeOptions
 import org.openqa.selenium.firefox.{FirefoxOptions, FirefoxProfile}
 import org.scalajs.jsenv.nodejs.NodeJSEnv
 import org.scalajs.jsenv.selenium.SeleniumJSEnv
+import org.scalajs.jsenv.wasmtime.WasmtimeEnv
 import sbtcrossproject.CrossProject
 import scala.scalanative.build._
 
@@ -298,6 +300,7 @@ Global / useJSEnv := NodeJS
 ThisBuild / jsEnv := {
   useJSEnv.value match {
     case NodeJS => new NodeJSEnv(NodeJSEnv.Config().withSourceMap(true))
+    case WasmTime => new WasmtimeEnv()
     case Firefox =>
       val profile = new FirefoxProfile()
       profile.setPreference("privacy.reduceTimerPrecision", false)
@@ -1012,13 +1015,18 @@ lazy val tests: CrossProject = crossProject(JSPlatform, JVMPlatform, NativePlatf
       "org.typelevel" %%% "cats-kernel-laws" % CatsVersion % Test,
       "org.typelevel" %%% "cats-mtl-laws" % CatsMtlVersion % Test
     ),
-    githubWorkflowArtifactUpload := false
+    githubWorkflowArtifactUpload := false,
   )
   .jsSettings(
     Compile / scalaJSUseMainModuleInitializer := true,
-    Compile / mainClass := Some("catseffect.examples.JSRunner"),
+    Compile / mainClass := Some("catseffect.examples.WasmtimeRunner"),
     // The default configured mapSourceURI is used for trace filtering
-    scalacOptions ~= { _.filterNot(_.startsWith("-P:scalajs:mapSourceURI")) }
+    scalacOptions ~= { _.filterNot(_.startsWith("-P:scalajs:mapSourceURI")) },
+    scalaJSLinkerConfig ~= { _
+      .withPrettyPrint(true)
+      .withExperimentalUseWebAssembly(true) // use the Wasm backend
+      .withModuleKind(ModuleKind.WasmComponent)  // required by the Wasm backend
+    }
   )
   .jvmSettings(
     fork := true,
@@ -1028,6 +1036,7 @@ lazy val tests: CrossProject = crossProject(JSPlatform, JVMPlatform, NativePlatf
     Compile / mainClass := Some("catseffect.examples.NativeRunner"),
     nativeTestSettings
   )
+
 
 lazy val wasmTests = project
   .in(file("wasmTests"))
