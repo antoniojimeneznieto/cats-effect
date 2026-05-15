@@ -23,7 +23,7 @@ import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.duration.Duration
 import scala.scalajs.wasi
 
-final class WasiPollingExecutor extends ExecutionContextExecutor with Scheduler {
+final class WasiPollingExecutor(pollEvery: Int) extends ExecutionContextExecutor with Scheduler {
   override def reportFailure(cause: Throwable): Unit = cause.printStackTrace()
 
   private[this] val executeQueue = new JArrayDeque[Runnable]
@@ -56,6 +56,7 @@ final class WasiPollingExecutor extends ExecutionContextExecutor with Scheduler 
   private final class SleepTask(val at: Long, val runnable: Runnable) extends Runnable with Comparable[SleepTask] {
     def run(): Unit = {
       sleepQueue.remove(this)
+      ()
     }
 
     def compareTo(that: SleepTask): Int = java.lang.Long.compare(this.at, that.at)
@@ -75,9 +76,11 @@ final class WasiPollingExecutor extends ExecutionContextExecutor with Scheduler 
       }
 
       // 2. tasks
-      while (!executeQueue.isEmpty()) {
+      var i = 0
+      while (i < pollEvery && !executeQueue.isEmpty()) {
         val task = executeQueue.poll()
         task.run()
+        i += 1
       }
 
       // 3. poll

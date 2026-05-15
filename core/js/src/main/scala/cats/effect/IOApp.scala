@@ -209,7 +209,7 @@ trait IOApp {
     linkTimeIf(moduleKind == ModuleKind.WasmComponent) {
       import unsafe.IORuntime
       val res = IORuntime.installGlobal {
-          val we = new WasiPollingExecutor
+          val we = new WasiPollingExecutor(64)
           val scheduler = we.asInstanceOf[Scheduler]
           val executor = we.asInstanceOf[ExecutionContext]
 

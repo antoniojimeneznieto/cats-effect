@@ -33,7 +33,7 @@ import scala.scalajs.wit
 
 package object examples {
   def exampleExecutionContext = linkTimeIf(moduleKind == ModuleKind.WasmComponent) {
-    (new WasiPollingExecutor).asInstanceOf[ExecutionContext]
+    (new WasiPollingExecutor(64)).asInstanceOf[ExecutionContext]
   } {
     MacrotaskExecutor
   }

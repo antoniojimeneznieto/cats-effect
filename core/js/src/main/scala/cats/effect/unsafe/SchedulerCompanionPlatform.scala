@@ -29,7 +29,7 @@ private[unsafe] abstract class SchedulerCompanionPlatform { this: Scheduler.type
 
   def createDefaultScheduler(): (Scheduler, () => Unit) =
     linkTimeIf(moduleKind == ModuleKind.WasmComponent) {
-      ((new WasiPollingExecutor).asInstanceOf[Scheduler], () => ())
+      ((new WasiPollingExecutor(64)).asInstanceOf[Scheduler], () => ())
     }
     {(
       new Scheduler {
