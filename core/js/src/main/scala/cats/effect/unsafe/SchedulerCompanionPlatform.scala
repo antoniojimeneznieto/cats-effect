@@ -22,12 +22,16 @@ import scala.scalajs.js.timers
 import scala.util.Try
 import cats.WasmMigration
 import scala.scalajs.LinkingInfo
+import scala.scalajs.LinkingInfo.{linkTimeIf, moduleKind, ModuleKind}
 
 private[unsafe] abstract class SchedulerCompanionPlatform { this: Scheduler.type =>
   private[this] val maxTimeout = Int.MaxValue.millis
 
   def createDefaultScheduler(): (Scheduler, () => Unit) =
-    (
+    linkTimeIf(moduleKind == ModuleKind.WasmComponent) {
+      ((new WasiPollingExecutor).asInstanceOf[Scheduler], () => ())
+    }
+    {(
       new Scheduler {
 
         def sleep(delay: FiniteDuration, task: Runnable): Runnable =
@@ -44,7 +48,8 @@ private[unsafe] abstract class SchedulerCompanionPlatform { this: Scheduler.type
         def monotonicNanos() = System.nanoTime()
         override def nowMicros(): Long = nowMicrosImpl()
       },
-      () => ())
+      () => ()
+    )}
 
   private[this] val mkCancelRunnable: timers.SetTimeoutHandle => Runnable =
     LinkingInfo.linkTimeIf(LinkingInfo.moduleKind == LinkingInfo.ModuleKind.WasmComponent) {
