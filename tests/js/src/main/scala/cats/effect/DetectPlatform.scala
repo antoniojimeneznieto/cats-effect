@@ -18,21 +18,28 @@ package cats.effect
 
 import scala.scalajs.js
 import scala.util.Try
+import scala.scalajs.LinkingInfo.{linkTimeIf, moduleKind, ModuleKind}
 
 trait DetectPlatform {
 
+  val isWasi: Boolean = moduleKind == ModuleKind.WasmComponent
+
   def isWSL: Boolean = {
-    val t = Try {
-      val os = js.Dynamic.global.require("os")
-      val process = js.Dynamic.global.process
+    linkTimeIf (moduleKind == ModuleKind.WasmComponent) {
+      false
+    } {
+      val t = Try {
+        val os = js.Dynamic.global.require("os")
+        val process = js.Dynamic.global.process
 
-      val isLinux = process.platform.asInstanceOf[String].toLowerCase == "linux"
-      val ms = os.release().asInstanceOf[String].toLowerCase.contains("microsoft")
+        val isLinux = process.platform.asInstanceOf[String].toLowerCase == "linux"
+        val ms = os.release().asInstanceOf[String].toLowerCase.contains("microsoft")
 
-      isLinux && ms // this mis-identifies docker on Windows, which should be considered unsupported for the CE build
+        isLinux && ms // this mis-identifies docker on Windows, which should be considered unsupported for the CE build
+      }
+
+      t.getOrElse(false)
     }
-
-    t.getOrElse(false)
   }
 
   def isJS: Boolean = true
