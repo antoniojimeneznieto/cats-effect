@@ -668,9 +668,10 @@ private final class IOFiber[A](
                 // `resume()` is a volatile read of `suspended` through which
                 // `wasFinalizing` and `handle` are published
                 if (finalizing == state.wasFinalizing) {
-                  if (isStackTracing) {
-                    state.handle.deregister()
-                  }
+                  //if (isStackTracing) {
+                  //  println(state.handle == null)
+                  //  state.handle.deregister()
+                  //}
 
                   val ec = currentCtx
                   if (!shouldFinalize()) {
@@ -799,15 +800,15 @@ private final class IOFiber[A](
              */
             state.wasFinalizing = finalizing
 
-            if (isStackTracing) {
-              //state.handle = monitor()
-              finalizers.push(IO {
-                state.handle.deregister()
-                ()
-              })
-              // remove the above finalizer if the Get completes without getting cancelled
-              conts = ByteStack.push(conts, OnCancelK)
-            }
+            //if (isStackTracing) {
+            //  //state.handle = monitor()
+            //  finalizers.push(IO {
+            //    state.handle.deregister()
+            //    ()
+            //  })
+            //  // remove the above finalizer if the Get completes without getting cancelled
+            //  conts = ByteStack.push(conts, OnCancelK)
+            //}
 
             /*
              * You should probably just read this as `suspended.compareAndSet(false, true)`.

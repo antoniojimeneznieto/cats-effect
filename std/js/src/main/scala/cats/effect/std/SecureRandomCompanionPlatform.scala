@@ -42,7 +42,12 @@ private[std] trait SecureRandomCompanionPlatform {
   // The seed in java.util.Random will be unused, so set to 0L instead of having to generate one
   private[std] class JavaSecureRandom() extends java.util.Random(0L) {
     // Make sure to resolve the appropriate function no later than the first instantiation
-    private val getRandomValuesFun = JavaSecureRandom.getRandomValuesFun
+    private val getRandomValuesFun =
+      linkTimeIf(moduleKind == ModuleKind.WasmComponent) {
+        throw new UnsupportedOperationException("getRandomValuesFun is not implemented for the Wasm Component Model platform")
+      } {
+        JavaSecureRandom.getRandomValuesFun
+      }
 
     /* setSeed has no effect. For cryptographically secure PRNGs, giving a seed
      * can only ever increase the entropy. It is never allowed to decrease it.
@@ -64,7 +69,7 @@ private[std] trait SecureRandomCompanionPlatform {
       } {
         val len = bytes.length
         val buffer = new Int8Array(len)
-        JavaSecureRandom.getRandomValuesFun(buffer)
+        getRandomValuesFun(buffer)
         var i = 0
         while (i != len) {
           bytes(i) = buffer(i)
@@ -81,7 +86,7 @@ private[std] trait SecureRandomCompanionPlatform {
             wasi.random.random.getRandomU64().toInt
           } {
             val buffer = new Int32Array(1)
-            JavaSecureRandom.getRandomValuesFun(buffer)
+            getRandomValuesFun(buffer)
             buffer(0)
           }
 
