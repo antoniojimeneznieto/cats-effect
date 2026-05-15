@@ -133,15 +133,14 @@ private final class WasiCallbackStackOps[A](private val callbacks: mutable.Stack
 private object CallbackStack {
   @inline def of[A](cb: A => Unit): CallbackStack[A] =
     linkTimeIf(moduleKind == ModuleKind.WasmComponent) {
-      new WasiCallbackStack(mutable.Stack[A => Unit](cb)).asInstanceOf[CallbackStack[A]]
+      new WasiCallbackStack(mutable.Stack[A => Unit](cb)) : CallbackStack[A]
     } {
-      js.Array(cb).asInstanceOf[CallbackStack[A]]
-      new JSCallbackStack(js.Array(cb)).asInstanceOf[CallbackStack[A]]
+      new JSCallbackStack(js.Array(cb))
     }
 
   @inline implicit def ops[A](stack: CallbackStack[A]): CallbackStackOps[A] =
     linkTimeIf(moduleKind == ModuleKind.WasmComponent) {
-      new WasiCallbackStackOps(stack.asInstanceOf[WasiCallbackStack[A]].stack).asInstanceOf[CallbackStackOps[A]]
+      new WasiCallbackStackOps(stack.asInstanceOf[WasiCallbackStack[A]].stack) : CallbackStackOps[A]
     } {
       new JSCallbackStackOps(stack.asInstanceOf[JSCallbackStack[A]].arr)
     }
