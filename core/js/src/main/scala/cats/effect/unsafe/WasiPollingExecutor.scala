@@ -23,7 +23,7 @@ import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.duration.Duration
 import scala.scalajs.wasi
 
-private[effect] final class WasiPollingExecutor extends ExecutionContextExecutor with Scheduler {
+final class WasiPollingExecutor extends ExecutionContextExecutor with Scheduler {
   override def reportFailure(cause: Throwable): Unit = cause.printStackTrace()
 
   private[this] val executeQueue = new JArrayDeque[Runnable]
