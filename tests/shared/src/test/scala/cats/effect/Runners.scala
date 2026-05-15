@@ -47,6 +47,7 @@ trait Runners extends TestInstances with RunnersPlatform with DetectPlatform {
     test(options) {
       val (fut, cancel) = body.unsafeToFutureCancelable()(runtime())
       timeout(fut, cancel, executionTimeout)
+      () // so that Wasm doesn't hang
     }
 
   /*
@@ -65,6 +66,7 @@ trait Runners extends TestInstances with RunnersPlatform with DetectPlatform {
       val rt = runtime()
       val (fut, cancel) = f(rt).unsafeToFutureCancelable()(rt)
       timeout(fut, cancel, executionTimeout)
+      () // so that Wasm doesn't hang
     }
 
   def assertEqv[A: Eq: Show](obtained: A, expected: A)(implicit loc: Location): Unit = {
