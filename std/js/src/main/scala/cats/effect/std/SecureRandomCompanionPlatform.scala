@@ -35,6 +35,9 @@ import cats.effect.std.Random.ScalaRandom
 import scala.scalajs.js
 import scala.scalajs.js.typedarray._
 
+import scala.scalajs.LinkingInfo.{linkTimeIf, moduleKind, ModuleKind}
+import scala.scalajs.wasi
+
 private[std] trait SecureRandomCompanionPlatform {
   // The seed in java.util.Random will be unused, so set to 0L instead of having to generate one
   private[std] class JavaSecureRandom() extends java.util.Random(0L) {
@@ -54,27 +57,36 @@ private[std] trait SecureRandomCompanionPlatform {
      */
     override def setSeed(x: Long): Unit = ()
 
-    override def nextBytes(bytes: Array[Byte]): Unit = {
-      val len = bytes.length
-      val buffer = new Int8Array(len)
-      getRandomValuesFun(buffer)
-      var i = 0
-      while (i != len) {
-        bytes(i) = buffer(i)
-        i += 1
+    override def nextBytes(bytes: Array[Byte]): Unit =
+      linkTimeIf(moduleKind == ModuleKind.WasmComponent) {
+        wasi.random.random.getRandomBytes(bytes.length.toLong).copyToArray(bytes)
+        ()
+      } {
+        val len = bytes.length
+        val buffer = new Int8Array(len)
+        JavaSecureRandom.getRandomValuesFun(buffer)
+        var i = 0
+        while (i != len) {
+          bytes(i) = buffer(i)
+          i += 1
+        }
       }
-    }
 
-    override protected final def next(numBits: Int): Int = {
+    override protected final def next(numBits: Int): Int =
       if (numBits <= 0) {
         0 // special case because the formula on the last line is incorrect for numBits == 0
       } else {
-        val buffer = new Int32Array(1)
-        getRandomValuesFun(buffer)
-        val rand32 = buffer(0)
+        val rand32 =
+          linkTimeIf(moduleKind == ModuleKind.WasmComponent) {
+            wasi.random.random.getRandomU64().toInt
+          } {
+            val buffer = new Int32Array(1)
+            JavaSecureRandom.getRandomValuesFun(buffer)
+            buffer(0)
+          }
+
         rand32 & (-1 >>> (32 - numBits)) // Clear the (32 - numBits) higher order bits
       }
-    }
   }
 
   private[std] object JavaSecureRandom {
