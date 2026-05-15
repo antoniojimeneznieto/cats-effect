@@ -17,6 +17,7 @@
 package catseffect
 
 import cats.effect.{ExitCode, IO, IOApp}
+import cats.effect.unsafe.WasiPollingExecutor
 import cats.syntax.all._
 
 import org.scalajs.macrotaskexecutor.MacrotaskExecutor
@@ -24,13 +25,64 @@ import org.scalajs.macrotaskexecutor.MacrotaskExecutor
 import scala.annotation.nowarn
 import scala.collection.mutable
 import scala.concurrent.duration.Duration
+import scala.concurrent.ExecutionContext
 import scala.scalajs.js
+import scala.scalajs.LinkingInfo.{linkTimeIf, ModuleKind, moduleKind}
+import scala.scalajs.wasi
+import scala.scalajs.wit
 
 package object examples {
-  def exampleExecutionContext = MacrotaskExecutor
+  def exampleExecutionContext = linkTimeIf(moduleKind == ModuleKind.WasmComponent) {
+    (new WasiPollingExecutor).asInstanceOf[ExecutionContext]
+  } {
+    MacrotaskExecutor
+  }
 }
 
 package examples {
+
+  object WasmtimeRunner {
+    val apps = mutable.Map.empty[String, () => IOApp]
+    def register(app: IOApp): Unit = apps(app.getClass.getName.init) = () => app
+    def registerLazy(name: String, app: => IOApp): Unit =
+      apps(name) = () => app
+
+    val rawApps = mutable.Map.empty[String, () => RawApp]
+    def registerRaw(app: RawApp): Unit = rawApps(app.getClass.getName.init) = () => app
+
+    register(HelloWorld)
+    register(Arguments)
+    register(NonFatalError)
+    register(FatalError)
+    register(RaiseFatalErrorAttempt)
+    register(RaiseFatalErrorHandle)
+    register(RaiseFatalErrorMap)
+    register(RaiseFatalErrorFlatMap)
+    registerRaw(FatalErrorRaw)
+    register(Canceled)
+    registerLazy("catseffect.examples.GlobalRacingInit", GlobalRacingInit)
+    registerLazy("catseffect.examples.GlobalShutdown", GlobalShutdown)
+    register(ShutdownHookImmediateTimeout)
+    register(LiveFiberSnapshot)
+    register(FatalErrorUnsafeRun)
+    register(Finalizers)
+    register(LeakedFiber)
+    register(UndefinedProcessExit)
+    register(CustomRuntime)
+    register(CpuStarvation)
+
+    @nowarn("msg=never used")
+    def main(paperweight: Array[String]): Unit = {
+      val args = wasi.cli.environment.getArguments()
+      val app = args(1)
+
+      apps
+        .get(app)
+        .map(_().main(Array.empty))
+        .orElse(rawApps.get(app).map(_().main(Array.empty)))
+        .get
+    }
+  }
 
   object JSRunner {
     val apps = mutable.Map.empty[String, () => IOApp]
@@ -84,7 +136,11 @@ package examples {
       super.runtimeConfig.copy(shutdownHookTimeout = Duration.Zero)
 
     val run: IO[Unit] =
-      IO(js.Dynamic.global.process.exit(0)).void.uncancelable
+      linkTimeIf(moduleKind == ModuleKind.WasmComponent) {
+        IO(wasi.cli.exit.exit(wit.Ok(()))).void.uncancelable
+      } { 
+        IO(js.Dynamic.global.process.exit(0)).void.uncancelable
+      }
   }
 
   object FatalErrorUnsafeRun extends IOApp {
@@ -98,7 +154,12 @@ package examples {
 
   object Finalizers extends IOApp {
     def writeToFile(string: String, file: String): IO[Unit] =
-      IO(js.Dynamic.global.require("fs").writeFileSync(file, string)).void
+      linkTimeIf(moduleKind == ModuleKind.WasmComponent) {
+        IO.println(s"supposed to write string to $file")
+      } {
+        IO(js.Dynamic.global.require("fs").writeFileSync(file, string)).void
+      }
+
 
     def run(args: List[String]): IO[ExitCode] =
       (IO(println("Started")) >> IO.never)
