@@ -328,13 +328,14 @@ ThisBuild / autoAPIMappings := true
 
 ThisBuild / Test / testOptions += Tests.Argument("+l")
 
-val CatsVersion = "2.13-WASM"
-val CatsMtlVersion = "1.7-WASM"
-val ScalaCheckVersion = "1.19-WASM"
-val CoopVersion = "1.3-WASM"
+ThisBuild / resolvers += "central-snapshots" at "https://central.sonatype.com/repository/maven-snapshots/"
+val CatsVersion = "2.13.0-250-c7e5425-SNAPSHOT"
+val CatsMtlVersion = "1.6.0"
+val ScalaCheckVersion = "1.19.0"
+val CoopVersion = "1.3.0"
 val MUnitVersion = "1.3.0-WASM"
-val MUnitScalaCheckVersion = "1.2.0-WASM"
-val DisciplineMUnitVersion = "2.0-WASM"
+val MUnitScalaCheckVersion = "1.3.0"
+val DisciplineMUnitVersion = "2.0.0"
 
 val MacrotaskExecutorVersion = "1.1.1"
 
@@ -1015,17 +1016,17 @@ lazy val tests: CrossProject = crossProject(JSPlatform, JVMPlatform, NativePlatf
       "org.typelevel" %%% "cats-kernel-laws" % CatsVersion % Test,
       "org.typelevel" %%% "cats-mtl-laws" % CatsMtlVersion % Test
     ),
-    githubWorkflowArtifactUpload := false,
+    githubWorkflowArtifactUpload := false
   )
   .jsSettings(
     Compile / scalaJSUseMainModuleInitializer := true,
     Compile / mainClass := Some("catseffect.examples.WasmtimeRunner"),
     // The default configured mapSourceURI is used for trace filtering
     scalacOptions ~= { _.filterNot(_.startsWith("-P:scalajs:mapSourceURI")) },
-    scalaJSLinkerConfig ~= { _
-      .withPrettyPrint(true)
-      .withExperimentalUseWebAssembly(true) // use the Wasm backend
-      .withModuleKind(ModuleKind.WasmComponent)  // required by the Wasm backend
+    scalaJSLinkerConfig ~= {
+      _.withPrettyPrint(true)
+        .withExperimentalUseWebAssembly(true) // use the Wasm backend
+        .withModuleKind(ModuleKind.WasmComponent) // required by the Wasm backend
     }
   )
   .jvmSettings(
@@ -1037,21 +1038,20 @@ lazy val tests: CrossProject = crossProject(JSPlatform, JVMPlatform, NativePlatf
     nativeTestSettings
   )
 
-
 lazy val wasmTests = project
   .in(file("wasmTests"))
   .dependsOn(core.js)
   .enablePlugins(ScalaJSPlugin)
   .settings(
-    scalaJSLinkerConfig ~= { _
-      .withPrettyPrint(true)
-      .withExperimentalUseWebAssembly(true) // use the Wasm backend
-      .withModuleKind(ModuleKind.WasmComponent)  // required by the Wasm backend
-      .withWasmFeatures { _
-        .withWitWorld(Some("scala"))
-        .withWitDirectory(Some("wit"))
-        .withExceptionHandling(true)
-      }
+    scalaJSLinkerConfig ~= {
+      _.withPrettyPrint(true)
+        .withExperimentalUseWebAssembly(true) // use the Wasm backend
+        .withModuleKind(ModuleKind.WasmComponent) // required by the Wasm backend
+        .withWasmFeatures {
+          _.withWitWorld(Some("scala"))
+            .withWitDirectory(Some("wit"))
+            .withExceptionHandling(true)
+        }
     }
   )
 
