@@ -97,7 +97,7 @@ object Console extends ConsoleCompanionCrossPlatform {
   /**
    * Constructs a `Console` instance for `F` data types that are [[cats.effect.kernel.Async]].
    */
-  def make[F[_]](implicit F: Async[F]): Console[F] = 
+  def make[F[_]](implicit F: Async[F]): Console[F] =
     LinkingInfo.linkTimeIf(LinkingInfo.moduleKind == LinkingInfo.ModuleKind.WasmComponent) {
       val stdin = wasi.cli.stdin.getStdin()
       val stdout = wasi.cli.stdout.getStdout()
@@ -178,13 +178,18 @@ object Console extends ConsoleCompanionCrossPlatform {
       stdin: wasi.cli.stdin.InputStream,
       stdout: wasi.cli.stdout.OutputStream,
       stderr: wasi.cli.stderr.OutputStream
-    )(implicit F: Async[F]) extends Console[F] {
+  )(implicit F: Async[F])
+      extends Console[F] {
 
     def write(stdout: wasi.cli.stdout.OutputStream, str: String): F[Unit] = {
-      F.blocking {
-        stdout.blockingWriteAndFlush(str.getBytes()) match {
-          case _: Ok[_] => ()
-          case _: Err[_] => throw new Exception("stdin.blocingWriteAndFlush returned err")
+      F.pure {
+        stdout.write(str.getBytes()) match {
+          case _: Ok[?] => ()
+          case _: Err[?] => throw new Exception("stdout.write returned err")
+        }
+        stdout.flush() match {
+          case _: Ok[?] => ()
+          case _: Err[?] => throw new Exception("stdin.flush returned err")
         }
       }
     }
@@ -195,11 +200,12 @@ object Console extends ConsoleCompanionCrossPlatform {
         stdin.read(1) match {
           case bytes: Ok[Array[Byte]] =>
             val head = bytes.value(0)
-            if (head  === '\n')
+            if (head === '\n')
               acc.toString()
             else
               go(acc.addOne(head))
-          case err: Err[wasi.io.streams.StreamError] => throw new Exception(s"Stdin read failed because: ${err}")
+          case err: Err[wasi.io.streams.StreamError] =>
+            throw new Exception(s"Stdin read failed because: ${err}")
         }
       }
 
