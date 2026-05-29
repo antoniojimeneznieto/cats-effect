@@ -16,24 +16,28 @@
 
 package cats.effect.unsafe
 
+import cats.effect.IOFiber
+
 import scala.collection.mutable
-import java.util.{ArrayDeque as JArrayDeque, PriorityQueue as JPriorityQueue}
-import scala.concurrent.ExecutionContextExecutor
-import scala.concurrent.duration.FiniteDuration
-import scala.concurrent.duration.Duration
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
+import scala.concurrent.duration.{Duration, FiniteDuration}
 import scala.scalajs.wasi
 
-final class WasiPollingExecutor(pollEvery: Int) extends ExecutionContextExecutor with Scheduler {
+import java.util.{PriorityQueue => JPriorityQueue}
+
+final class WasiPollingExecutor(pollEvery: Int)
+    extends ExecutionContextExecutor
+    with Scheduler {
   override def reportFailure(cause: Throwable): Unit = cause.printStackTrace()
 
-  private[this] val executeQueue = new JArrayDeque[Runnable]
+  private[this] val executeQueue = new mutable.Queue[Runnable]
   private[this] val sleepQueue = new JPriorityQueue[SleepTask]
 
-  private val events = new mutable.ArrayDeque[wasi.io.poll.Pollable](256)
+  private val events = mutable.ArrayDeque.empty[wasi.io.poll.Pollable]
 
   private var needsReschedule = true
 
-  def poll(timeout: Long): Boolean = 
+  def poll(timeout: Long): Boolean =
     if (events.isEmpty) {
       false
     } else {
@@ -48,12 +52,13 @@ final class WasiPollingExecutor(pollEvery: Int) extends ExecutionContextExecutor
 
       // Remove completed events
       handles.foreach(events.remove)
-      
+
       events.length > 0
     }
 
-
-  private final class SleepTask(val at: Long, val runnable: Runnable) extends Runnable with Comparable[SleepTask] {
+  private final class SleepTask(val at: Long, val runnable: Runnable)
+      extends Runnable
+      with Comparable[SleepTask] {
     def run(): Unit = {
       sleepQueue.remove(this)
       ()
@@ -77,22 +82,26 @@ final class WasiPollingExecutor(pollEvery: Int) extends ExecutionContextExecutor
 
       // 2. tasks
       var i = 0
-      while (i < pollEvery && !executeQueue.isEmpty()) {
-        val task = executeQueue.poll()
-        task.run()
+      while (i < pollEvery && !executeQueue.isEmpty) {
+        val task = executeQueue.dequeue()
+        try task.run()
+        catch {
+          case t: Throwable =>
+            IOFiber.onFatalFailure(t)
+        }
         i += 1
       }
 
       // 3. poll
       val timeout =
-        if (!executeQueue.isEmpty())
+        if (!executeQueue.isEmpty)
           0
         else if (!sleepQueue.isEmpty())
           Math.max(sleepQueue.peek().at - monotonicNanos(), 0)
         else
           -1
 
-      continue = !executeQueue.isEmpty() || !sleepQueue.isEmpty() || poll(timeout)
+      continue = !executeQueue.isEmpty || !sleepQueue.isEmpty() || poll(timeout)
     }
 
     needsReschedule = true
@@ -104,7 +113,7 @@ final class WasiPollingExecutor(pollEvery: Int) extends ExecutionContextExecutor
   }
 
   override def execute(command: Runnable): Unit = {
-    executeQueue.addLast(command)
+    executeQueue.enqueue(command)
     scheduleIfNeeded()
   }
 
