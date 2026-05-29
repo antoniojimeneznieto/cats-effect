@@ -45,9 +45,11 @@ trait Runners extends TestInstances with RunnersPlatform with DetectPlatform {
 
   def real(options: TestOptions)(body: => IO[Unit])(implicit loc: Location): Unit =
     test(options) {
-      val (fut, cancel) = body.unsafeToFutureCancelable()(runtime())
-      timeout(fut, cancel, executionTimeout)
-      () // so that Wasm doesn't hang
+      body
+        .timeoutTo(
+          executionTimeout,
+          IO.raiseError(new TestTimeoutException(s"test timed out after ${executionTimeout}")))
+        .unsafeToFuture()(runtime())
     }
 
   /*
