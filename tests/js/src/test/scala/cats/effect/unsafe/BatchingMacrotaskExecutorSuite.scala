@@ -23,47 +23,51 @@ import cats.syntax.all._
 import org.scalajs.macrotaskexecutor.MacrotaskExecutor
 
 import scala.concurrent.duration._
+import scala.scalajs.LinkingInfo.{linkTimeIf, isWebAssembly}
 
 class BatchingMacrotaskExecutorSuite extends BaseSuite {
 
-  real("batch fibers") { // fails if running on MacrotaskExecutor
-    CountDownLatch[IO](10).flatMap { latch =>
-      IO.ref(List.empty[Int]).flatMap { ref =>
-        List.range(0, 10).traverse_ { i =>
-          val task = ref.update(_ :+ i) *> latch.release
-          val taskOnEc = if (i == 0) task.evalOn(MacrotaskExecutor) else task
-          taskOnEc.start
-        } *>
-          latch.await *>
-          ref.get.map(assertEquals(_, List.range(1, 10) :+ 0))
-      }
-    }
-  }
+  linkTimeIf(isWebAssembly)() {
 
-  real("cede to macrotasks") { // fails if running on Promises EC
-    IO.ref(false)
-      .flatMap { ref =>
-        ref.set(true).evalOn(MacrotaskExecutor).start *>
-          (ref.get, IO.cede, ref.get).tupled.start
-      }
-      .flatMap { f =>
-        f.join.flatMap(_.embedNever).flatMap {
-          case (before, (), after) =>
-            IO {
-              assert(!before)
-              assert(after)
-            }
+    real("batch fibers") { // fails if running on MacrotaskExecutor
+      CountDownLatch[IO](10).flatMap { latch =>
+        IO.ref(List.empty[Int]).flatMap { ref =>
+          List.range(0, 10).traverse_ { i =>
+            val task = ref.update(_ :+ i) *> latch.release
+            val taskOnEc = if (i == 0) task.evalOn(MacrotaskExecutor) else task
+            taskOnEc.start
+          } *>
+            latch.await *>
+            ref.get.map(assertEquals(_, List.range(1, 10) :+ 0))
         }
       }
-  }
+    }
 
-  real("limit batch sizes") {
-    IO.ref(true).flatMap { continue =>
-      def go: IO[Unit] = continue.get.flatMap {
-        IO.defer(go).both(IO.defer(go)).void.whenA(_)
+    real("cede to macrotasks") { // fails if running on Promises EC
+      IO.ref(false)
+        .flatMap { ref =>
+          ref.set(true).evalOn(MacrotaskExecutor).start *>
+            (ref.get, IO.cede, ref.get).tupled.start
+        }
+        .flatMap { f =>
+          f.join.flatMap(_.embedNever).flatMap {
+            case (before, (), after) =>
+              IO {
+                assert(!before)
+                assert(after)
+              }
+          }
+        }
+    }
+
+    real("limit batch sizes") {
+      IO.ref(true).flatMap { continue =>
+        def go: IO[Unit] = continue.get.flatMap {
+          IO.defer(go).both(IO.defer(go)).void.whenA(_)
+        }
+        val stop = IO.sleep(100.millis) *> continue.set(false)
+        go.both(stop) *> IO(assert(true))
       }
-      val stop = IO.sleep(100.millis) *> continue.set(false)
-      go.both(stop) *> IO(assert(true))
     }
   }
 

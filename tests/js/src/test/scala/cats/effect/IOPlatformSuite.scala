@@ -21,11 +21,11 @@ import cats.syntax.all._
 import org.scalacheck.Prop.forAll
 
 import scala.scalajs.js
+import scala.scalajs.LinkingInfo.{linkTimeIf, isWebAssembly}
 
 trait IOPlatformSuite { self: BaseScalaCheckSuite =>
 
-  def platformTests() = {
-
+  def platformTests() = linkTimeIf(isWebAssembly)() {
     tickedProperty("round trip through js.Promise".ignore) { implicit ticker =>
       forAll { (ioa: IO[Int]) =>
         assertEqv(ioa, IO.fromPromise(IO(ioa.unsafeToPromise())))

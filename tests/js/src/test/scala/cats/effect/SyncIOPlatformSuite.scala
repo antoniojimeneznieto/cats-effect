@@ -15,9 +15,10 @@
  */
 
 package cats.effect
+import scala.scalajs.LinkingInfo.{linkTimeIf, isWebAssembly}
 
 trait SyncIOPlatformSuite { self: BaseSuite =>
-  def platformTests() = {
+  def platformTests() = linkTimeIf(isWebAssembly)() {
 
     testUnit("realTimeDate should return an Instant constructed from realTime") {
       // Unfortunately since SyncIO doesn't rely on a controllable
