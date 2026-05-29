@@ -108,7 +108,7 @@ final class WasiPollingExecutor(pollEvery: Int)
   }
 
   private def scheduleIfNeeded() = if (needsReschedule) {
-    loop()
+    ExecutionContext.global.execute(() => loop())
     needsReschedule = false
   }
 
