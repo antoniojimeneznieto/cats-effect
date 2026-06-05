@@ -33,7 +33,7 @@ import scala.scalajs.wit
 
 package object examples {
   def exampleExecutionContext = linkTimeIf(moduleKind == ModuleKind.WasmComponent) {
-    (new WasiPollingExecutor(64)).asInstanceOf[ExecutionContext]
+    WasiPollingExecutor.global.asInstanceOf[ExecutionContext]
   } {
     MacrotaskExecutor
   }
@@ -138,7 +138,7 @@ package examples {
     val run: IO[Unit] =
       linkTimeIf(moduleKind == ModuleKind.WasmComponent) {
         IO(wasi.cli.exit.exit(wit.Ok(()))).void.uncancelable
-      } { 
+      } {
         IO(js.Dynamic.global.process.exit(0)).void.uncancelable
       }
   }
@@ -159,7 +159,6 @@ package examples {
       } {
         IO(js.Dynamic.global.require("fs").writeFileSync(file, string)).void
       }
-
 
     def run(args: List[String]): IO[ExitCode] =
       (IO(println("Started")) >> IO.never)

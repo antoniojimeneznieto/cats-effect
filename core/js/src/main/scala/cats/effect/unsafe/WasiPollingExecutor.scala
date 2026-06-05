@@ -25,36 +25,18 @@ import scala.scalajs.wasi
 
 import java.util.{PriorityQueue => JPriorityQueue}
 
-final class WasiPollingExecutor(pollEvery: Int)
+final class WasiPollingExecutor(pollEvery: Int, system: PollingSystem.WithPoller[WasiPoller])
     extends ExecutionContextExecutor
     with Scheduler {
-  override def reportFailure(cause: Throwable): Unit = cause.printStackTrace()
+
+  private val poller = system.makePoller()
 
   private[this] val executeQueue = new mutable.Queue[Runnable]
   private[this] val sleepQueue = new JPriorityQueue[SleepTask]
 
-  private val events = mutable.ArrayDeque.empty[wasi.io.poll.Pollable]
-
   private var needsReschedule = true
 
-  def poll(timeout: Long): Boolean =
-    if (events.isEmpty) {
-      false
-    } else {
-      if (timeout != -1) {
-        // adding a clock works like a timeout
-        val alarm = wasi.clocks.monotonic_clock.subscribeDuration(timeout)
-        events += alarm
-      }
-
-      // Block until an I/O completes
-      val handles = wasi.io.poll.poll(events.toArray)
-
-      // Remove completed events
-      handles.foreach(events.remove)
-
-      events.length > 0
-    }
+  override def reportFailure(cause: Throwable): Unit = cause.printStackTrace()
 
   private final class SleepTask(val at: Long, val runnable: Runnable)
       extends Runnable
@@ -101,7 +83,12 @@ final class WasiPollingExecutor(pollEvery: Int)
         else
           -1
 
-      continue = !executeQueue.isEmpty || !sleepQueue.isEmpty() || poll(timeout)
+      if (system.needsPoll(poller) && timeout < -1) {
+        system.poll(poller, timeout)
+        system.processReadyEvents(poller)
+      }
+
+      continue = !executeQueue.isEmpty || !sleepQueue.isEmpty() || system.needsPoll(poller)
     }
 
     needsReschedule = true
@@ -134,4 +121,8 @@ final class WasiPollingExecutor(pollEvery: Int)
 
   def monotonicNanos(): Long = wasi.clocks.monotonic_clock.now()
   def nowMillis(): Long = (wasi.clocks.wall_clock.now().nanoseconds / 1000000).toLong
+}
+
+object WasiPollingExecutor {
+  val global = new WasiPollingExecutor(64, WasiPollSystem)
 }

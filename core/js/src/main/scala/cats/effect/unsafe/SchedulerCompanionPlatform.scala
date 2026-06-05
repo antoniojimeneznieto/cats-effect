@@ -29,27 +29,28 @@ private[unsafe] abstract class SchedulerCompanionPlatform { this: Scheduler.type
 
   def createDefaultScheduler(): (Scheduler, () => Unit) =
     linkTimeIf(moduleKind == ModuleKind.WasmComponent) {
-      ((new WasiPollingExecutor(64)).asInstanceOf[Scheduler], () => ())
+      (WasiPollingExecutor.global.asInstanceOf[Scheduler], () => ())
+    } {
+      (
+        new Scheduler {
+
+          def sleep(delay: FiniteDuration, task: Runnable): Runnable =
+            if (delay <= maxTimeout) {
+              val handle = timers.setTimeout(delay)(task.run())
+              mkCancelRunnable(handle)
+            } else {
+              var cancel: Runnable = () => ()
+              cancel = sleep(maxTimeout, () => cancel = sleep(delay - maxTimeout, task))
+              () => cancel.run()
+            }
+
+          def nowMillis() = System.currentTimeMillis()
+          def monotonicNanos() = System.nanoTime()
+          override def nowMicros(): Long = nowMicrosImpl()
+        },
+        () => ()
+      )
     }
-    {(
-      new Scheduler {
-
-        def sleep(delay: FiniteDuration, task: Runnable): Runnable =
-          if (delay <= maxTimeout) {
-            val handle = timers.setTimeout(delay)(task.run())
-            mkCancelRunnable(handle)
-          } else {
-            var cancel: Runnable = () => ()
-            cancel = sleep(maxTimeout, () => cancel = sleep(delay - maxTimeout, task))
-            () => cancel.run()
-          }
-
-        def nowMillis() = System.currentTimeMillis()
-        def monotonicNanos() = System.nanoTime()
-        override def nowMicros(): Long = nowMicrosImpl()
-      },
-      () => ()
-    )}
 
   private[this] val mkCancelRunnable: timers.SetTimeoutHandle => Runnable =
     LinkingInfo.linkTimeIf(LinkingInfo.moduleKind == LinkingInfo.ModuleKind.WasmComponent) {

@@ -205,20 +205,15 @@ trait IOApp {
   def run(args: List[String]): IO[ExitCode]
 
   import scala.scalajs.LinkingInfo.{linkTimeIf, moduleKind, ModuleKind}
-  final def main(args: Array[String]): Unit = 
+  final def main(args: Array[String]): Unit =
     linkTimeIf(moduleKind == ModuleKind.WasmComponent) {
       import unsafe.IORuntime
       val res = IORuntime.installGlobal {
-          val we = new WasiPollingExecutor(64)
-          val scheduler = we.asInstanceOf[Scheduler]
-          val executor = we.asInstanceOf[ExecutionContext]
+        val we = WasiPollingExecutor.global
+        val scheduler = we.asInstanceOf[Scheduler]
+        val executor = we.asInstanceOf[ExecutionContext]
 
-          IORuntime(
-            executor,
-            executor,
-            scheduler,
-            () => IORuntime.resetGlobal(),
-            runtimeConfig)
+        IORuntime(executor, executor, scheduler, () => IORuntime.resetGlobal(), runtimeConfig)
       }
 
       _runtime = IORuntime.global
@@ -227,20 +222,20 @@ trait IOApp {
       import scala.scalajs.wit
 
       run(args.toList).unsafeRunFiber(
-          {
-            println("cancelled")
-            wasi.cli.exit.exit(wit.Err(()))
-          },
-          e => {
-            e.printStackTrace()
-            wasi.cli.exit.exit(wit.Err(()))
-            throw e
-          },
-          c => {
-            println("completed")
-            wasi.cli.exit.exit(wit.Ok(()))
-          }
-        )(runtime)
+        {
+          println("cancelled")
+          wasi.cli.exit.exit(wit.Err(()))
+        },
+        e => {
+          e.printStackTrace()
+          wasi.cli.exit.exit(wit.Err(()))
+          throw e
+        },
+        c => {
+          println("completed")
+          wasi.cli.exit.exit(wit.Ok(()))
+        }
+      )(runtime)
       ()
     } {
       val installed = if (runtime == null) {
@@ -273,8 +268,8 @@ trait IOApp {
       }
 
       if (LinkingInfo.developmentMode && isStackTracing) {
-        val listener: js.Function0[Unit] = () =>
-          runtime.fiberMonitor.printLiveFiberSnapshot(System.err.print(_))
+        val listener: js.Function0[Unit] =
+          () => runtime.fiberMonitor.printLiveFiberSnapshot(System.err.print(_))
         process.on("SIGUSR2", listener)
         process.on("SIGINFO", listener)
       }

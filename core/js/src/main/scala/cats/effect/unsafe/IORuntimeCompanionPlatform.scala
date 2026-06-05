@@ -30,7 +30,7 @@ private[unsafe] abstract class IORuntimeCompanionPlatform { this: IORuntime.type
       reportFailure: Throwable => Unit = _.printStackTrace()
   ): ExecutionContext =
     LinkingInfo.linkTimeIf(LinkingInfo.moduleKind == LinkingInfo.ModuleKind.WasmComponent) {
-      (new WasiPollingExecutor(batchSize)).asInstanceOf[ExecutionContext]
+      WasiPollingExecutor.global.asInstanceOf[ExecutionContext]
     } {
       new BatchingMacrotaskExecutor(batchSize, reportFailure)
     }
@@ -54,19 +54,14 @@ private[unsafe] abstract class IORuntimeCompanionPlatform { this: IORuntime.type
   def global: IORuntime = {
     if (_global == null) {
       val (ec, sc) = linkTimeIf(moduleKind == ModuleKind.WasmComponent) {
-        val we = new WasiPollingExecutor(64) // TODO don't hard-code this
+        val we = WasiPollingExecutor.global
         (we.asInstanceOf[ExecutionContext], we.asInstanceOf[Scheduler])
       } {
         (defaultComputeExecutionContext, defaultScheduler)
       }
 
       installGlobal {
-        IORuntime(
-          ec,
-          ec,
-          sc,
-          () => resetGlobal(),
-          IORuntimeConfig())
+        IORuntime(ec, ec, sc, () => resetGlobal(), IORuntimeConfig())
       }
       ()
     }
