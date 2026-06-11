@@ -26,9 +26,13 @@ import scalajs.wit
 object Main extends IOApp.Simple {
   def run: IO[Unit] =
     for {
+      _ <- IO.println("Starting")
       f <- IO.unit.foreverM.start
-      _ <- IO.sleep(1.second)
+      _ <- IO.println("Waiting")
+      _ <- IO.sleep(5.second)
+      _ <- IO.println("Ending")
       _ <- f.cancel
+      _ <- IO.println("Ended")
     } yield ()
 }
 

@@ -3,25 +3,26 @@ package cats.effect.unsafe
 import scala.scalajs.wasi
 import scala.scalajs.wit
 import scala.collection.mutable
+import scala.concurrent.duration.FiniteDuration
 
 final class WasiPoller(events: mutable.Queue[wasi.io.poll.Pollable]) {
-  val callbacks = mutable.Queue.empty[Unit => Unit]
+  val callbacks = mutable.ArrayDeque.empty[() => Unit]
   var readyEvents: Array[Int] = null
+  var sleeps = mutable.PriorityQueue.empty[FiniteDuration]
 
-  def poll(timeout: Long): PollResult =
+  def poll(processImmediately: Boolean): PollResult =
     if (events.isEmpty) {
       // no events means we don't have anything to poll for
       PollResult.Complete
     } else {
-      if (timeout == -1) {
+      if (!processImmediately) {
         // Wait indefinitely for ready events
         readyEvents = wasi.io.poll.poll(events.toArray)
       } else {
-        // adding a clock works like a timeout
-        val alarm = wasi.clocks.monotonic_clock.subscribeDuration(timeout)
+        // add a ready pollable so that we process ready pollables only
+        val alarm = wasi.clocks.monotonic_clock.subscribeDuration(0)
         events += alarm
-
-        val alarmIdx = events.length - 1
+        val alarmIdx = events.length
 
         val processed = wasi.io.poll.poll(events.toArray)
 
@@ -30,7 +31,7 @@ final class WasiPoller(events: mutable.Queue[wasi.io.poll.Pollable]) {
          * if it got polled.
          */
         events.removeFirst(_ == alarm)
-        readyEvents = processed.filter(_ == alarmIdx) // this copies
+        readyEvents = processed.filterNot(_ == alarmIdx) // this copies
       }
 
       if (readyEvents == events) PollResult.Complete
@@ -42,7 +43,7 @@ final class WasiPoller(events: mutable.Queue[wasi.io.poll.Pollable]) {
       var did = false
       readyEvents.foreach { idx =>
         val cb = callbacks.remove(idx)
-        val event = events.remove(idx)
+        events.remove(idx)
         did = true
         cb()
       }
@@ -54,4 +55,26 @@ final class WasiPoller(events: mutable.Queue[wasi.io.poll.Pollable]) {
     }
 
   def needsPoll: Boolean = events.length > 0
+
+  def registerPollable(pollable: wasi.io.poll.Pollable, cb: () => Unit): Unit = {
+    events.append(pollable)
+    callbacks.append(cb)
+  }
+
+  def deregisterPollable(pollable: wasi.io.poll.Pollable): Unit = {
+    val idx = events.indexOf(pollable)
+    events.remove(idx)
+    callbacks.remove(idx)
+
+    // TODO should we check in readyEvents?
+    ()
+  }
+
+  def registerSleep(duration: FiniteDuration, cb: () => Unit): () => Unit = {
+    val alarm = wasi.clocks.monotonic_clock.subscribeDuration(duration.toNanos)
+    registerPollable(alarm, cb)
+    sleeps.enqueue(duration)
+
+    () => deregisterPollable(alarm)
+  }
 }

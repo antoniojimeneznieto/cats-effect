@@ -2,6 +2,7 @@ package cats.effect.unsafe
 
 import cats.effect.unsafe.metrics.PollerMetrics
 import scala.collection.mutable
+import scala.scalajs.wasi
 
 object WasiPollSystem extends PollingSystem {
 
@@ -20,7 +21,7 @@ object WasiPollSystem extends PollingSystem {
   override def closePoller(poller: Poller): Unit = ()
 
   override def poll(poller: Poller, nanos: Long): PollResult =
-    poller.poll(nanos)
+    poller.poll(nanos > 0)
 
   override def processReadyEvents(poller: Poller): Boolean =
     poller.processReadyEvents()
@@ -31,4 +32,6 @@ object WasiPollSystem extends PollingSystem {
 
   override def metrics(poller: Poller): PollerMetrics = ???
 
+  def registerPollable(poller: Poller, pollable: wasi.io.poll.Pollable, cb: () => Unit) =
+    poller.registerPollable(pollable, cb)
 }
