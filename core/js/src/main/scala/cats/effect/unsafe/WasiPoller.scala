@@ -8,7 +8,6 @@ import scala.concurrent.duration.FiniteDuration
 final class WasiPoller(events: mutable.Queue[wasi.io.poll.Pollable]) {
   val callbacks = mutable.ArrayDeque.empty[() => Unit]
   var readyEvents: Array[Int] = null
-  var sleeps = mutable.PriorityQueue.empty[FiniteDuration]
 
   lazy val noop = () => ()
 
@@ -75,7 +74,6 @@ final class WasiPoller(events: mutable.Queue[wasi.io.poll.Pollable]) {
   def registerSleep(duration: FiniteDuration, cb: () => Unit): () => Unit = {
     val alarm = wasi.clocks.monotonic_clock.subscribeDuration(duration.toNanos)
     registerPollable(alarm, cb)
-    sleeps.enqueue(duration)
     callbacks.append(noop)
 
     () => deregisterPollable(alarm)
