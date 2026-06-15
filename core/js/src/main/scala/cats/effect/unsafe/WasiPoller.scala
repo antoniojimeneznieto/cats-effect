@@ -10,6 +10,8 @@ final class WasiPoller(events: mutable.Queue[wasi.io.poll.Pollable]) {
   var readyEvents: Array[Int] = null
   var sleeps = mutable.PriorityQueue.empty[FiniteDuration]
 
+  lazy val noop = () => ()
+
   def poll(processImmediately: Boolean): PollResult =
     if (events.isEmpty) {
       // no events means we don't have anything to poll for
@@ -22,7 +24,7 @@ final class WasiPoller(events: mutable.Queue[wasi.io.poll.Pollable]) {
         // add a ready pollable so that we process ready pollables only
         val alarm = wasi.clocks.monotonic_clock.subscribeDuration(0)
         events += alarm
-        val alarmIdx = events.length
+        val alarmIdx = events.length - 1
 
         val processed = wasi.io.poll.poll(events.toArray)
 
@@ -74,6 +76,7 @@ final class WasiPoller(events: mutable.Queue[wasi.io.poll.Pollable]) {
     val alarm = wasi.clocks.monotonic_clock.subscribeDuration(duration.toNanos)
     registerPollable(alarm, cb)
     sleeps.enqueue(duration)
+    callbacks.append(noop)
 
     () => deregisterPollable(alarm)
   }
