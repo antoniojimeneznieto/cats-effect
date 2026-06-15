@@ -66,8 +66,8 @@ final class WasiPoller(events: mutable.Queue[wasi.io.poll.Pollable]) {
     val idx = events.indexOf(pollable)
     events.remove(idx)
     callbacks.remove(idx)
+    readyEvents = readyEvents.filterNot(_ == idx)
 
-    // TODO should we check in readyEvents?
     ()
   }
 
