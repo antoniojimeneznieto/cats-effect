@@ -33,10 +33,22 @@ final class WasiPollingExecutor(pollEvery: Int, system: PollingSystem.WithPoller
   private val poller = system.makePoller()
 
   private[this] val executeQueue = new mutable.Queue[Runnable]
+  private[this] val sleepQueue = new JPriorityQueue[SleepTask]
 
   private var needsReschedule = true
 
   override def reportFailure(cause: Throwable): Unit = cause.printStackTrace()
+
+  private final class SleepTask(val at: Long, val runnable: Runnable)
+      extends Runnable
+      with Comparable[SleepTask] {
+    def run(): Unit = {
+      sleepQueue.remove(this)
+      ()
+    }
+
+    def compareTo(that: SleepTask): Int = java.lang.Long.compare(this.at, that.at)
+  }
 
   def loop() = {
     needsReschedule = false
@@ -45,7 +57,13 @@ final class WasiPollingExecutor(pollEvery: Int, system: PollingSystem.WithPoller
     while (continue) {
       val now = monotonicNanos()
 
-      // 1. tasks & timers
+      // 1. timers
+      while (!sleepQueue.isEmpty() && sleepQueue.peek().at <= now) {
+        val task = sleepQueue.poll()
+        task.runnable.run()
+      }
+
+      // 2. tasks
       var i = 0
       while (i < pollEvery && !executeQueue.isEmpty) {
         val task = executeQueue.dequeue()
@@ -57,15 +75,21 @@ final class WasiPollingExecutor(pollEvery: Int, system: PollingSystem.WithPoller
         i += 1
       }
 
-      // 2. poll
-      val processImmediately = !executeQueue.isEmpty
+      // 3. poll
+      val timeout =
+        if (!executeQueue.isEmpty)
+          0
+        else if (!sleepQueue.isEmpty())
+          Math.max(sleepQueue.peek().at - monotonicNanos(), 0)
+        else
+          -1
 
-      if (system.needsPoll(poller)) {
-        poller.poll(processImmediately)
+      while (system.needsPoll(poller)) {
+        poller.poll(timeout)
         system.processReadyEvents(poller)
       }
 
-      continue = !executeQueue.isEmpty || system.needsPoll(poller)
+      continue = !executeQueue.isEmpty || !sleepQueue.isEmpty || system.needsPoll(poller)
     }
 
     needsReschedule = true
@@ -88,9 +112,11 @@ final class WasiPollingExecutor(pollEvery: Int, system: PollingSystem.WithPoller
       noop
     } else {
       scheduleIfNeeded()
-      val cancel = poller.registerSleep(delay, () => command.run())
+      val now = monotonicNanos()
+      val sleepTask = new SleepTask(now + delay.toNanos, command)
+      sleepQueue.offer(sleepTask)
 
-      () => cancel()
+      sleepTask // SleepTask itself is a runnable that cancels the sleep
     }
   }
 

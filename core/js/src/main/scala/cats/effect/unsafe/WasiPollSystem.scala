@@ -21,7 +21,7 @@ object WasiPollSystem extends PollingSystem {
   override def closePoller(poller: Poller): Unit = ()
 
   override def poll(poller: Poller, nanos: Long): PollResult =
-    poller.poll(nanos > 0)
+    poller.poll(nanos)
 
   override def processReadyEvents(poller: Poller): Boolean =
     poller.processReadyEvents()
