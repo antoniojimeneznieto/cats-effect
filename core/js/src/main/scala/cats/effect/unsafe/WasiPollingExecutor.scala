@@ -18,13 +18,14 @@ package cats.effect.unsafe
 
 import cats.effect.IOFiber
 
+import org.typelevel.scalaccompat.annotation.{nowarn213, nowarn3}
+
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
 import scala.concurrent.duration.{Duration, FiniteDuration}
 import scala.scalajs.wasi
 
 import java.util.{PriorityQueue => JPriorityQueue}
-import scala.concurrent.duration.DurationInt
 
 final class WasiPollingExecutor(pollEvery: Int, system: PollingSystem.WithPoller[WasiPoller])
     extends ExecutionContextExecutor
@@ -95,6 +96,8 @@ final class WasiPollingExecutor(pollEvery: Int, system: PollingSystem.WithPoller
     needsReschedule = true
   }
 
+  @nowarn213("cat=other")
+  @nowarn3("cat=other")
   private def scheduleIfNeeded() = if (needsReschedule) {
     ExecutionContext.global.execute(() => loop())
     needsReschedule = false
