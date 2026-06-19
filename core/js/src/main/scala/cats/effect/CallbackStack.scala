@@ -21,15 +21,15 @@ import scala.collection.mutable
 import scala.scalajs.LinkingInfo.{linkTimeIf, ModuleKind, moduleKind}
 
 import CallbackStack.Handle
+import scala.annotation.tailrec
 
 private trait CallbackStack[A]
 private final class JSCallbackStack[A](val arr: js.Array[A => Unit]) extends CallbackStack[A]
-private final class WasiCallbackStack[A](val stack: mutable.Stack[A => Unit]) extends CallbackStack[A]
 
 private trait CallbackStackOps[A] extends Any {
-  @inline def push(next: A => Unit): Handle[A] 
+  @inline def push(next: A => Unit): Handle[A]
 
-  @inline def unsafeSetCallback(cb: A => Unit): Unit 
+  @inline def unsafeSetCallback(cb: A => Unit): Unit
 
   /**
    * Invokes *all* non-null callbacks in the queue, starting with the current one. Returns true
@@ -49,7 +49,8 @@ private trait CallbackStackOps[A] extends Any {
 }
 
 private final class JSCallbackStackOps[A](private val callbacks: js.Array[A => Unit])
-    extends AnyVal with CallbackStackOps[A] {
+    extends AnyVal
+    with CallbackStackOps[A] {
 
   @inline def push(next: A => Unit): Handle[A] = {
     callbacks.push(next)
@@ -91,16 +92,44 @@ private final class JSCallbackStackOps[A](private val callbacks: js.Array[A => U
     bound - bound // aka 0, but so bound is not unused ...
 }
 
-private final class WasiCallbackStackOps[A](private val callbacks: mutable.Stack[A => Unit])
-    extends AnyVal with CallbackStackOps[A] {
+private final class WasiCallbackStack[A](private var callbacks: mutable.ArrayBuffer[A => Unit])
+    extends CallbackStack[A]
+    with CallbackStackOps[A] {
+
+  private val order = mutable.ArrayDeque.from(0.until(callbacks.length))
 
   @inline def push(next: A => Unit): Handle[A] = {
-    callbacks.push(next)
-    callbacks.length - 1
+    @tailrec
+    def loop(idx: Int): Int = {
+      if (idx >= callbacks.length) {
+        callbacks.addOne(next)
+        order.prepend(idx)
+        idx
+      } else if (callbacks(idx) == null) {
+        callbacks(idx) = next
+        order.prepend(idx)
+        idx
+      } else {
+        loop(idx + 1)
+      }
+    }
+    if (callbacks equals null) {
+      callbacks = mutable.ArrayBuffer(next)
+      order.prepend(0)
+      0
+    } else {
+      loop(0)
+    }
   }
 
   @inline def unsafeSetCallback(cb: A => Unit): Unit = {
-    callbacks(callbacks.length - 1) = cb
+    if (order.isEmpty) {
+      callbacks.prepend(cb)
+      order.prepend(0)
+    } else {
+      val last = order.head
+      callbacks(last) = cb
+    }
   }
 
   /**
@@ -108,23 +137,26 @@ private final class WasiCallbackStackOps[A](private val callbacks: mutable.Stack
    * iff *any* callbacks were invoked.
    */
   @inline def apply(oc: A): Boolean =
-    callbacks
-      .foldRight(false)( // skips deleted indices, but there can still be nulls
-        (cb: A => Unit, acc: Boolean) =>
-          if (cb ne null) { cb(oc); true }
-          else acc,
-      )
+    order.foldLeft(false) { (acc, idx) =>
+      if (callbacks(idx) ne null) { callbacks(idx)(oc); true }
+      else acc
+    }
 
   /**
    * Removes the callback referenced by a handle. Returns `true` if the data structure was
    * cleaned up immediately, `false` if a subsequent call to [[pack]] is required.
    */
   @inline def clearHandle(handle: Handle[A]): Boolean = {
-    callbacks.remove(handle, 1)
+    callbacks(handle) = null
+    val idx = order.indexOf(handle)
+    order.remove(idx)
     true
   }
 
-  @inline def clear(): Unit = ()
+  @inline def clear(): Unit = {
+    callbacks.clear()
+    order.clear()
+  }
 
   @inline def pack(bound: Int): Int =
     bound - bound // aka 0, but so bound is not unused ...
@@ -133,14 +165,14 @@ private final class WasiCallbackStackOps[A](private val callbacks: mutable.Stack
 private object CallbackStack {
   @inline def of[A](cb: A => Unit): CallbackStack[A] =
     linkTimeIf(moduleKind == ModuleKind.WasmComponent) {
-      new WasiCallbackStack(mutable.Stack[A => Unit](cb)) : CallbackStack[A]
+      new WasiCallbackStack(mutable.ArrayBuffer[A => Unit](cb)): CallbackStack[A]
     } {
       new JSCallbackStack(js.Array(cb))
     }
 
   @inline implicit def ops[A](stack: CallbackStack[A]): CallbackStackOps[A] =
     linkTimeIf(moduleKind == ModuleKind.WasmComponent) {
-      new WasiCallbackStackOps(stack.asInstanceOf[WasiCallbackStack[A]].stack) : CallbackStackOps[A]
+      stack.asInstanceOf[CallbackStackOps[A]]
     } {
       new JSCallbackStackOps(stack.asInstanceOf[JSCallbackStack[A]].arr)
     }
