@@ -74,12 +74,12 @@ private[unsafe] abstract class SchedulerCompanionPlatform { this: Scheduler.type
         !(performance.timeOrigin + performance.now()).isNaN
       }
 
-      def browsers = WasmMigration.forComponent(Option.empty[Performance]) {
+      def browsers =
         Try(js.Dynamic.global.performance.asInstanceOf[js.UndefOr[Performance]].filter(test))
           .toOption
           .flatMap(_.toOption)
-      }
-      def nodeJS = WasmMigration.forComponent(Option.empty[Performance]) {
+
+      def nodeJS =
         Try {
           js.Dynamic
             .global
@@ -88,7 +88,6 @@ private[unsafe] abstract class SchedulerCompanionPlatform { this: Scheduler.type
             .asInstanceOf[js.UndefOr[Performance]]
             .filter(test)
         }.toOption.flatMap(_.toOption)
-      }
 
       browsers.orElse(nodeJS).map { performance => () =>
         ((performance.timeOrigin + performance.now()) * 1000).toLong

@@ -124,7 +124,16 @@ final class WasiPollingExecutor(pollEvery: Int, system: PollingSystem.WithPoller
   }
 
   def monotonicNanos(): Long = wasi.clocks.monotonic_clock.now()
-  def nowMillis(): Long = (wasi.clocks.wall_clock.now().nanoseconds / 1000000).toLong
+
+  def nowMillis(): Long = {
+    val now = wasi.clocks.wall_clock.now()
+    (now.seconds * 10000) + (now.nanoseconds / 1000000)
+  }
+
+  override def nowMicros(): Long = {
+    val now = wasi.clocks.wall_clock.now()
+    (now.seconds.toLong * 1000000) + (now.nanoseconds.toLong / 1000)
+  }
 }
 
 object WasiPollingExecutor {
