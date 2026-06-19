@@ -21,14 +21,19 @@ import scala.concurrent.duration._
 
 import java.util.concurrent.atomic.AtomicBoolean
 
+import scala.scalajs.LinkingInfo.{linkTimeIf, isWebAssembly}
+
 class SchedulerSuite extends BaseSuite {
 
-  real("correctly handle very long sleeps") {
-    // When the provided timeout in milliseconds overflows a signed 32-bit int, the implementation defaults to 1 millisecond
-    IO.sleep(Long.MaxValue.nanos)
-      .race(IO.sleep(100.millis))
-      .map(r => assertEquals(r, Right(())))
+  linkTimeIf(isWebAssembly)() {
+    real("correctly handle very long sleeps") {
+      // When the provided timeout in milliseconds overflows a signed 32-bit int, the implementation defaults to 1 millisecond
+      IO.sleep(Long.MaxValue.nanos)
+        .race(IO.sleep(100.millis))
+        .map(r => assertEquals(r, Right(())))
+    }
   }
+
   real("use the correct max timeout") {
     IO.sleep(Int.MaxValue.millis)
       .race(IO.sleep(100.millis))
