@@ -29,7 +29,7 @@ private sealed trait ArrayStack[A <: AnyRef] extends Any {
 
   @inline def push(a: A): Unit
 
-  @inline def pop(): A 
+  @inline def pop(): A
 
   @inline def peek(): A
 
@@ -41,7 +41,9 @@ private sealed trait ArrayStack[A <: AnyRef] extends Any {
 
 }
 
-private final class WasmArrayStack[A <: AnyRef](val buffer: mutable.Stack[A]) extends AnyVal with ArrayStack[A] {
+private final class WasmArrayStack[A <: AnyRef](val buffer: mutable.Stack[A])
+    extends AnyVal
+    with ArrayStack[A] {
 
   @inline override def push(a: A): Unit = {
     buffer.push(a)
@@ -52,7 +54,7 @@ private final class WasmArrayStack[A <: AnyRef](val buffer: mutable.Stack[A]) ex
     buffer.pop()
   }
 
-  @inline override def peek(): A = buffer(buffer.length - 1)
+  @inline override def peek(): A = buffer(0)
 
   @inline override def isEmpty(): Boolean = buffer.length == 0
 
@@ -65,7 +67,9 @@ private final class WasmArrayStack[A <: AnyRef](val buffer: mutable.Stack[A]) ex
 
 }
 
-private final class JSArrayStack[A <: AnyRef](val buffer: js.Array[A]) extends AnyVal with ArrayStack[A] {
+private final class JSArrayStack[A <: AnyRef](val buffer: js.Array[A])
+    extends AnyVal
+    with ArrayStack[A] {
 
   @inline def push(a: A): Unit = {
     buffer.push(a)
@@ -89,7 +93,6 @@ private final class JSArrayStack[A <: AnyRef](val buffer: js.Array[A]) extends A
   }
 }
 
-
 private object ArrayStack {
 
   @inline def apply[A <: AnyRef](size: Int): ArrayStack[A] = {
@@ -97,7 +100,7 @@ private object ArrayStack {
     apply()
   }
 
-  @inline def apply[A <: AnyRef](): ArrayStack[A] = 
+  @inline def apply[A <: AnyRef](): ArrayStack[A] =
     linkTimeIf(moduleKind == ModuleKind.WasmComponent) {
       new WasmArrayStack(new mutable.Stack[A]).asInstanceOf[ArrayStack[A]]
     } {
