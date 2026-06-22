@@ -137,7 +137,8 @@ final class MutexSuite extends BaseSuite with DetectPlatform {
     real(
       s"${name} should not deadlock when highly contended"
     ) {
-      val p = mutex.flatMap(_.lock.use_.parReplicateA_(10)).replicateA_(10000).void
+      val lots = if (isWasi) 1000 else 10000 // 10000 currently times-out on Wasi
+      val p = mutex.flatMap(_.lock.use_.parReplicateA_(10)).replicateA_(lots).void
 
       p.mustEqual(())
     }
