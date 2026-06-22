@@ -27,7 +27,7 @@ import scala.scalajs.wasi
 
 import java.util.{PriorityQueue => JPriorityQueue}
 
-final class WasiPollingExecutor(pollEvery: Int, system: PollingSystem.WithPoller[WasiPoller])
+final class WasiPollingExecutor(pollEvery: Int, system: PollingSystem.WithPoller[WasiPoller], reportFailure0: Throwable => Unit = _.printStackTrace())
     extends ExecutionContextExecutor
     with Scheduler {
 
@@ -38,7 +38,7 @@ final class WasiPollingExecutor(pollEvery: Int, system: PollingSystem.WithPoller
 
   private var needsReschedule = true
 
-  override def reportFailure(cause: Throwable): Unit = cause.printStackTrace()
+  override def reportFailure(cause: Throwable): Unit = reportFailure0(cause)
 
   private final class SleepTask(val at: Long, val runnable: Runnable)
       extends Runnable

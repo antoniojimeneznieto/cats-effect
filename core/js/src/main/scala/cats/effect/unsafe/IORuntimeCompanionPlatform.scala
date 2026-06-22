@@ -17,23 +17,28 @@
 package cats.effect.unsafe
 
 import scala.concurrent.ExecutionContext
-import scala.scalajs.LinkingInfo
 import scala.scalajs.LinkingInfo.{linkTimeIf, ModuleKind, moduleKind}
 
 private[unsafe] abstract class IORuntimeCompanionPlatform { this: IORuntime.type =>
 
   def defaultComputeExecutionContext: ExecutionContext =
-    createBatchingMacrotaskExecutor()
+    linkTimeIf(moduleKind == ModuleKind.WasmComponent) {
+      WasiPollingExecutor.global: ExecutionContext
+    } {
+      createBatchingMacrotaskExecutor()
+    }
 
   def createBatchingMacrotaskExecutor(
       batchSize: Int = 64,
       reportFailure: Throwable => Unit = _.printStackTrace()
   ): ExecutionContext =
-    LinkingInfo.linkTimeIf(LinkingInfo.moduleKind == LinkingInfo.ModuleKind.WasmComponent) {
-      WasiPollingExecutor.global.asInstanceOf[ExecutionContext]
-    } {
-      new BatchingMacrotaskExecutor(batchSize, reportFailure)
-    }
+    new BatchingMacrotaskExecutor(batchSize, reportFailure)
+
+  def createWasiPollingExecutor(
+      batchSize: Int = 64,
+      reportFailure: Throwable => Unit = _.printStackTrace()
+  ): ExecutionContext =
+    new WasiPollingExecutor(batchSize, WasiPollSystem, reportFailure)
 
   def defaultScheduler: Scheduler = Scheduler.createDefaultScheduler()._1
 

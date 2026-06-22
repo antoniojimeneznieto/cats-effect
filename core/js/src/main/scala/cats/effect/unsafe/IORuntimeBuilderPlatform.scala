@@ -16,13 +16,19 @@
 
 package cats.effect.unsafe
 
+import scala.scalajs.LinkingInfo.{linkTimeIf, moduleKind, ModuleKind}
+
 private[unsafe] abstract class IORuntimeBuilderPlatform { self: IORuntimeBuilder =>
 
   protected def platformSpecificBuild: IORuntime = {
     val defaultShutdown: () => Unit = () => ()
     val (compute, computeShutdown) = customCompute.getOrElse(
       (
-        IORuntime.createBatchingMacrotaskExecutor(reportFailure = failureReporter),
+        linkTimeIf(moduleKind == ModuleKind.WasmComponent) {
+          IORuntime.createWasiPollingExecutor(reportFailure = failureReporter)
+        } {
+          IORuntime.createBatchingMacrotaskExecutor(reportFailure = failureReporter)
+        },
         defaultShutdown
       )
     )
@@ -33,7 +39,7 @@ private[unsafe] abstract class IORuntimeBuilderPlatform { self: IORuntimeBuilder
       computeShutdown()
       blockingShutdown()
       schedulerShutdown()
-      //extraShutdownHooks.reverse.foreach(_())
+      extraShutdownHooks.reverse.foreach(_())
     }
     val runtimeConfig = customConfig.getOrElse(IORuntimeConfig())
 

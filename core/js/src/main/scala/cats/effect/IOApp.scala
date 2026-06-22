@@ -205,10 +205,12 @@ trait IOApp {
   def run(args: List[String]): IO[ExitCode]
 
   import scala.scalajs.LinkingInfo.{linkTimeIf, moduleKind, ModuleKind}
+
   final def main(args: Array[String]): Unit =
     linkTimeIf(moduleKind == ModuleKind.WasmComponent) {
       import unsafe.IORuntime
-      val res = IORuntime.installGlobal {
+
+      IORuntime.installGlobal {
         val we = WasiPollingExecutor.global
         val scheduler = we.asInstanceOf[Scheduler]
         val executor = we.asInstanceOf[ExecutionContext]
@@ -222,17 +224,12 @@ trait IOApp {
       import scala.scalajs.wit
 
       run(args.toList).unsafeRunFiber(
-        {
-          println("cancelled")
-          wasi.cli.exit.exit(wit.Err(()))
-        },
+        wasi.cli.exit.exit(wit.Err(())),
         e => {
           e.printStackTrace()
           wasi.cli.exit.exit(wit.Err(()))
-          throw e
         },
-        c => {
-          println("completed")
+        _ => {
           wasi.cli.exit.exit(wit.Ok(()))
         }
       )(runtime)
