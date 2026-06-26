@@ -31,7 +31,6 @@ package cats.effect.unsafe.ref
 import scala.scalajs.js
 import scala.scalajs.LinkingInfo.{linkTimeIf, isWebAssembly}
 import scala.scalajs.LinkingInfo
-import cats.WasmMigration
 
 private[unsafe] class ReferenceQueue[T] {
 
@@ -42,7 +41,7 @@ private[unsafe] class ReferenceQueue[T] {
    * of `ReferenceQueue` does not actually prescribe FIFO ordering, and experimentation shows
    * that the JVM implementation does not guarantee that ordering.
    */
-  private[this] val enqueuedRefs = 
+  private[this] val enqueuedRefs =
     LinkingInfo.linkTimeIf(LinkingInfo.moduleKind == LinkingInfo.ModuleKind.WasmComponent) {
       throw new NotImplementedError("finalizationRegistry")
     } {

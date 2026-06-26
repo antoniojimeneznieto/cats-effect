@@ -26,15 +26,15 @@ import scalajs.LinkingInfo.*
 private[tracing] abstract class TracingPlatform { self: Tracing.type =>
 
   private[this] val cache = mutable.Map.empty[Any, TracingEvent].withDefaultValue(null)
-  private[this] val function0Property = 
+  private[this] val function0Property =
     linkTimeIf(LinkingInfo.moduleKind == ModuleKind.WasmComponent) {
-      "wasm unimplemented"
+      "Cannot read properties of Function0"
     } {
       js.Object.getOwnPropertyNames((() => ()).asInstanceOf[js.Object])(0)
     }
   private[this] val function1Property =
     linkTimeIf(LinkingInfo.moduleKind == ModuleKind.WasmComponent) {
-      "wasm unimplemented"
+      "Cannot read properties of Function1"
     } {
       js.Object.getOwnPropertyNames(((_: Unit) => ()).asInstanceOf[js.Object])(0)
     }
@@ -50,7 +50,7 @@ private[tracing] abstract class TracingPlatform { self: Tracing.type =>
     }
   }
 
-  def calculateTracingEvent[A, B](f: Function1[A, B]): TracingEvent = 
+  def calculateTracingEvent[A, B](f: Function1[A, B]): TracingEvent =
     linkTimeIf(LinkingInfo.moduleKind == ModuleKind.WasmComponent) {
       buildEvent()
     } {

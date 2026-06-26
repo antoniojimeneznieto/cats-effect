@@ -19,6 +19,7 @@ package unsafe
 
 import scala.concurrent.ExecutionContext
 import scala.scalajs.{js, LinkingInfo}
+import scala.scalajs.LinkingInfo.{linkTimeIf, moduleKind, ModuleKind}
 
 private[effect] sealed abstract class FiberMonitor extends FiberMonitorShared {
 
@@ -153,18 +154,21 @@ private final class NoOpFiberMonitor extends FiberMonitor {
 }
 
 private[effect] object FiberMonitor {
-  def apply(compute: ExecutionContext): FiberMonitor = {
-    if (LinkingInfo.developmentMode && weakRefsAvailable) {
-      if (compute.isInstanceOf[BatchingMacrotaskExecutor]) {
-        val bmec = compute.asInstanceOf[BatchingMacrotaskExecutor]
-        new FiberMonitorImpl(bmec)
+  def apply(compute: ExecutionContext): FiberMonitor =
+    linkTimeIf(moduleKind == ModuleKind.WasmComponent) {
+      new NoOpFiberMonitor(): FiberMonitor
+    } {
+      if (LinkingInfo.developmentMode && weakRefsAvailable) {
+        if (compute.isInstanceOf[BatchingMacrotaskExecutor]) {
+          val bmec = compute.asInstanceOf[BatchingMacrotaskExecutor]
+          new FiberMonitorImpl(bmec)
+        } else {
+          new FiberMonitorImpl(null)
+        }
       } else {
-        new FiberMonitorImpl(null)
+        new NoOpFiberMonitor()
       }
-    } else {
-      new NoOpFiberMonitor()
     }
-  }
 
   private[this] final val Undefined = "undefined"
 
@@ -176,6 +180,6 @@ private[effect] object FiberMonitor {
       false
     } {
       js.typeOf(js.Dynamic.global.WeakRef) != Undefined &&
-        js.typeOf(js.Dynamic.global.FinalizationRegistry) != Undefined
+      js.typeOf(js.Dynamic.global.FinalizationRegistry) != Undefined
     }
 }
