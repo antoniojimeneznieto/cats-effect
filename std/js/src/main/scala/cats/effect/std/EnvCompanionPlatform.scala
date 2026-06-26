@@ -23,6 +23,10 @@ import scala.collection.immutable.Iterable
 import scala.scalajs.js
 import scala.util.Try
 import scalajs.LinkingInfo.{linkTimeIf, moduleKind, ModuleKind}
+import scala.scalajs.wasi
+import scala.scalajs.wit
+import scala.collection.mutable
+import scala.scalajs.WitUtils
 
 private[std] class EnvCompanionPlatform {
   private[std] final class SyncEnv[F[_]](implicit F: Sync[F]) extends Env[F] {
@@ -36,10 +40,17 @@ private[std] class EnvCompanionPlatform {
 
     private def processEnv: Map[String, Any] =
       linkTimeIf(moduleKind == ModuleKind.WasmComponent) {
-        Map.empty[String, Any]
+        wasi
+          .cli
+          .environment
+          .getEnvironment()
+          .foldLeft(Map.newBuilder[String, Any]) { (builder, tuple) =>
+            builder += tuple._1 -> tuple._2
+          }
+          .result()
       } {
-      Try(js.Dynamic.global.process.env.asInstanceOf[js.Dictionary[Any]].toMap[String, Any])
-        .getOrElse(Map.empty[String, Any])
+        Try(js.Dynamic.global.process.env.asInstanceOf[js.Dictionary[Any]].toMap[String, Any])
+          .getOrElse(Map.empty[String, Any])
       }
   }
 }
