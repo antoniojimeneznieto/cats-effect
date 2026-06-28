@@ -1,3 +1,4 @@
+import org.scalajs.linker.interface.ESVersion
 import sbtcrossproject.CrossProjectMacros
 /*
  * Copyright 2020-2025 Typelevel
@@ -339,10 +340,10 @@ ThisBuild / Test / testOptions += Tests.Argument("+l")
 ThisBuild / resolvers += "central-snapshots" at "https://central.sonatype.com/repository/maven-snapshots/"
 val CatsVersion = "2.13-WASM"
 val CatsMtlVersion = "1.7-WASM"
-val ScalaCheckVersion = "1.19.0-60-0a65904-SNAPSHOT"
+val ScalaCheckVersion = "1.19.0-66-3b1e58f-SNAPSHOT"
 val CoopVersion = "1.3.0"
-val MUnitVersion = "1.3.0-WASM"
-val MUnitScalaCheckVersion = "1.2.0-WASM"
+val MUnitVersion = "1.3.3-WASM"
+val MUnitScalaCheckVersion = "1.3.0-WASM"
 val DisciplineMUnitVersion = "2.0-WASM"
 
 val MacrotaskExecutorVersion = "1.1.1"
@@ -1031,10 +1032,13 @@ lazy val tests: CrossProject = crossProject(JSPlatform, JVMPlatform, NativePlatf
     Compile / mainClass := Some("catseffect.examples.WasmtimeRunner"),
     // The default configured mapSourceURI is used for trace filtering
     scalacOptions ~= { _.filterNot(_.startsWith("-P:scalajs:mapSourceURI")) },
-    scalaJSLinkerConfig ~= {
-      _.withPrettyPrint(true)
-        .withExperimentalUseWebAssembly(true) // use the Wasm backend
-        .withModuleKind(ModuleKind.WasmComponent) // required by the Wasm backend
+    scalaJSLinkerConfig ~= { _
+      .withPrettyPrint(true)
+      .withModuleKind(ModuleKind.WasmComponent)
+      .withESFeatures { _
+        .withUseWebAssembly(true)
+        .withESVersion(ESVersion.ES2022)
+      }
     }
   )
   .jvmSettings(
@@ -1053,7 +1057,10 @@ lazy val wasmTests = project
   .settings(
     scalaJSLinkerConfig ~= {
       _.withPrettyPrint(true)
-        .withExperimentalUseWebAssembly(true) // use the Wasm backend
+        .withESFeatures { _
+          .withESVersion(ESVersion.ES2022)
+          .withUseWebAssembly(true)
+        }
         .withModuleKind(ModuleKind.WasmComponent) // required by the Wasm backend
         .withWasmFeatures {
           _.withWitWorld(Some("scala"))
