@@ -38,20 +38,17 @@ import scala.scalajs.wasi
  *
  * @WitImplementation
  * object Entrypoint extends IOAppWasi with Run {
- *   val app = Main
- *   override def run() = runApp()
+ *   override def run() = runApp(Main)
  * }
  * }}}
  */
 trait IOAppWasi {
-  val app: IOApp
-
   /**
    * Runs specified [[IOApp]] with arguments sourced from environment.
    * @return [[scala.sclajs.wit.Ok wit.Ok(())]] on success or
    *         [[scala.scalajs.wit.Err wit.Err(())]] on failure
    */
-  def runApp(): wit.Result[Unit, Unit] = {
+  def runApp(app: IOApp): wit.Result[Unit, Unit] = {
     val args = wasi.cli.environment.getArguments()
     try {
       app.main(args)
