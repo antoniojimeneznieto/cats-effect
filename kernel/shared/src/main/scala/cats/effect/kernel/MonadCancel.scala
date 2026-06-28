@@ -16,7 +16,7 @@
 
 package cats.effect.kernel
 
-import cats.{MonadError, Monoid, Semigroup}
+import cats.{Id, MonadError, Monoid, Semigroup}
 import cats.data.{
   EitherT,
   IndexedReaderWriterStateT,
@@ -583,7 +583,7 @@ object MonadCancel {
         Sync.syncForStateT[F, S](sync)
       case cancel =>
         new StateTMonadCancel[F, S, E] {
-          def rootCancelScope = F0.rootCancelScope
+          def rootCancelScope: CancelScope = F0.rootCancelScope
           override implicit protected def F: MonadCancel[F, E] = cancel
         }
     }
@@ -602,11 +602,16 @@ object MonadCancel {
         }
     }
 
-  trait Uncancelable[F[_], E] { this: MonadCancel[F, E] =>
+  private val cachedPoll: Poll[Id] = new Poll[Id] {
+    def apply[A](fa: Id[A]): Id[A] = fa
+  }
 
-    private[this] val IdPoll = new Poll[F] {
-      def apply[A](fa: F[A]) = fa
-    }
+  trait Uncancelable[F[_], E] { this: MonadCancel[F, E] =>
+    // There used to be a field in this class which wasn't really necessary.
+    // After it was removed (as a memory optimization - see the uncancelable method),
+    // the compiler would no longer generate the $init$ method. To get it back
+    // and thus stay backwards compatible, we apply the following trick:
+    locally { () } // Do not remove this line.
 
     def rootCancelScope: CancelScope = CancelScope.Uncancelable
 
@@ -618,7 +623,7 @@ object MonadCancel {
     }
 
     def uncancelable[A](body: Poll[F] => F[A]): F[A] =
-      body(IdPoll)
+      body(MonadCancel.cachedPoll.asInstanceOf[Poll[F]])
   }
 
   private[kernel] trait OptionTMonadCancel[F[_], E] extends MonadCancel[OptionT[F, *], E] {

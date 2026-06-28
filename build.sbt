@@ -116,6 +116,11 @@ val ArmOS = "ubuntu-22.04-arm"
 val Windows = "windows-latest"
 val MacOS = "macos-14"
 
+val ScalaNativeLLVM = "/usr/lib/llvm-15/bin"
+val ArmNativeCI = s"matrix.ci == '${CI.Native.command}' && matrix.os == '$ArmOS'"
+val NonArmNativeCI = s"matrix.ci != '${CI.Native.command}' || matrix.os != '$ArmOS'"
+val ArmNativeEnv = Map("LLVM_BIN" -> ScalaNativeLLVM)
+
 val Scala212 = "2.12.21"
 val Scala213 = "2.13.18"
 val Scala3 = "3.3.7"
@@ -131,11 +136,6 @@ ThisBuild / tlCiReleaseTags := true
 ThisBuild / tlCiReleaseBranches := Nil
 
 ThisBuild / githubWorkflowArtifactDownloadExtraKeys += "ci"
-ThisBuild / githubWorkflowPublishPreamble +=
-  WorkflowStep.Use(
-    UseRef.Public("typelevel", "await-cirrus", "main"),
-    name = Some("Wait for Cirrus CI")
-  )
 
 val OldGuardJava = JavaSpec.temurin("8")
 val LTSJava = JavaSpec.temurin("11")
@@ -185,7 +185,15 @@ ThisBuild / githubWorkflowBuild := Seq("JVM", "JS", "Native").map { platform =>
     ) // windows has file lock issues due to shared sources
   )
 } ++ Seq(
-  WorkflowStep.Sbt(List("${{ matrix.ci }}")),
+  WorkflowStep.Sbt(
+    List("${{ matrix.ci }}"),
+    cond = Some(ArmNativeCI),
+    env = ArmNativeEnv
+  ),
+  WorkflowStep.Sbt(
+    List("${{ matrix.ci }}"),
+    cond = Some(NonArmNativeCI)
+  ),
   WorkflowStep.Sbt(
     List("docs/mdoc"),
     cond = Some(
@@ -461,7 +469,7 @@ lazy val kernel = crossProject(JSPlatform, JVMPlatform, NativePlatform)
     libraryDependencies += "org.scala-js" %%% "scala-js-macrotask-executor" % MacrotaskExecutorVersion % Test
   )
   .nativeSettings(
-    libraryDependencies += "io.github.cquiroz" %%% "scala-java-time" % "2.6.0"
+    libraryDependencies += "io.github.cquiroz" %%% "scala-java-time" % "2.7.0"
   )
 
 /**
