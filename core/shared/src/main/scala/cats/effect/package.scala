@@ -18,7 +18,7 @@ package cats
 
 import cats.effect.{kernel => cekernel}
 
-package object effect {
+package object effect extends EffectPlatform {
 
   type Outcome[F[_], E, A] = cekernel.Outcome[F, E, A]
   val Outcome = cekernel.Outcome

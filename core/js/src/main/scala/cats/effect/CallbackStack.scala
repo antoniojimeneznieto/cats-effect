@@ -21,10 +21,9 @@ import scala.collection.mutable
 import scala.scalajs.LinkingInfo.{linkTimeIf, ModuleKind, moduleKind}
 
 import CallbackStack.Handle
+
 import scala.annotation.tailrec
 
-private trait CallbackStack[A]
-private final class JSCallbackStack[A](val arr: js.Array[A => Unit]) extends CallbackStack[A]
 
 private trait CallbackStackOps[A] extends Any {
   @inline def push(next: A => Unit): Handle[A]
@@ -93,8 +92,7 @@ private final class JSCallbackStackOps[A](private val callbacks: js.Array[A => U
 }
 
 private final class WasiCallbackStack[A](private var callbacks: mutable.ArrayBuffer[A => Unit])
-    extends CallbackStack[A]
-    with CallbackStackOps[A] {
+    extends CallbackStackOps[A] {
 
   private val order = mutable.ArrayDeque.from(0.until(callbacks.length))
 
@@ -113,6 +111,7 @@ private final class WasiCallbackStack[A](private var callbacks: mutable.ArrayBuf
         loop(idx + 1)
       }
     }
+
     if (callbacks equals null) {
       callbacks = mutable.ArrayBuffer(next)
       order.prepend(0)
@@ -122,7 +121,7 @@ private final class WasiCallbackStack[A](private var callbacks: mutable.ArrayBuf
     }
   }
 
-  @inline def unsafeSetCallback(cb: A => Unit): Unit = {
+  @inline def unsafeSetCallback(cb: A => Unit): Unit =
     if (order.isEmpty) {
       callbacks.prepend(cb)
       order.prepend(0)
@@ -130,7 +129,6 @@ private final class WasiCallbackStack[A](private var callbacks: mutable.ArrayBuf
       val last = order.head
       callbacks(last) = cb
     }
-  }
 
   /**
    * Invokes *all* non-null callbacks in the queue, starting with the current one. Returns true
@@ -162,20 +160,44 @@ private final class WasiCallbackStack[A](private var callbacks: mutable.ArrayBuf
     bound - bound // aka 0, but so bound is not unused ...
 }
 
+
 private object CallbackStack {
+  type Handle[A] = Int
+
+  private[effect] sealed trait CallbackStackFactory {
+    type CallbackStack[A]
+    def of[A](cb: A => Unit): CallbackStack[A]
+    implicit def ops[A](stack: CallbackStack[A]): CallbackStackOps[A]
+  }
+
+  private lazy val jsFactory: CallbackStackFactory = new CallbackStackFactory {
+    type CallbackStack[A] = js.Array[A => Unit]
+
+    @inline def of[A](cb: A => Unit): CallbackStack[A] =
+      new js.Array[A => Unit]()
+
+    @inline def ops[A](stack: CallbackStack[A]): CallbackStackOps[A] =
+      new JSCallbackStackOps(stack)
+  }
+
+  private lazy val wasmFactory: CallbackStackFactory = new CallbackStackFactory {
+    type CallbackStack[A] = WasiCallbackStack[A]
+
+    @inline def of[A](cb: A => Unit): CallbackStack[A] =
+      new WasiCallbackStack(mutable.ArrayBuffer[A => Unit](cb))
+
+    @inline def ops[A](stack: CallbackStack[A]): CallbackStackOps[A] =
+      stack.asInstanceOf[CallbackStackOps[A]]
+  }
+
+  private[effect] val factory: CallbackStackFactory =
+    linkTimeIf(moduleKind == ModuleKind.WasmComponent)(wasmFactory)(jsFactory)
+
+  private[effect] type StackType[A] = factory.CallbackStack[A]
+
   @inline def of[A](cb: A => Unit): CallbackStack[A] =
-    linkTimeIf(moduleKind == ModuleKind.WasmComponent) {
-      new WasiCallbackStack(mutable.ArrayBuffer[A => Unit](cb)): CallbackStack[A]
-    } {
-      new JSCallbackStack(js.Array(cb))
-    }
+    factory.of(cb)
 
   @inline implicit def ops[A](stack: CallbackStack[A]): CallbackStackOps[A] =
-    linkTimeIf(moduleKind == ModuleKind.WasmComponent) {
-      stack.asInstanceOf[CallbackStackOps[A]]
-    } {
-      new JSCallbackStackOps(stack.asInstanceOf[JSCallbackStack[A]].arr)
-    }
-
-  type Handle[A] = Int
+    factory.ops(stack)
 }
