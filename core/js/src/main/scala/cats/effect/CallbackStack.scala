@@ -24,7 +24,6 @@ import CallbackStack.Handle
 
 import scala.annotation.tailrec
 
-
 private trait CallbackStackOps[A] extends Any {
   @inline def push(next: A => Unit): Handle[A]
 
@@ -160,44 +159,55 @@ private final class WasiCallbackStack[A](private var callbacks: mutable.ArrayBuf
     bound - bound // aka 0, but so bound is not unused ...
 }
 
+private object CallbackStackFactory {
+  import CallbackStack.CallbackStackFactory
 
-private object CallbackStack {
-  type Handle[A] = Int
+  // Explicitly typed to aid linkTimeIf type resolution
+  def Wasm: CallbackStackFactory = new CallbackStackFactory {
+    type StackType[A] = WasiCallbackStack[A]
 
-  private[effect] sealed trait CallbackStackFactory {
-    type CallbackStack[A]
-    def of[A](cb: A => Unit): CallbackStack[A]
-    implicit def ops[A](stack: CallbackStack[A]): CallbackStackOps[A]
-  }
-
-  private lazy val jsFactory: CallbackStackFactory = new CallbackStackFactory {
-    type CallbackStack[A] = js.Array[A => Unit]
-
-    @inline def of[A](cb: A => Unit): CallbackStack[A] =
-      new js.Array[A => Unit]()
-
-    @inline def ops[A](stack: CallbackStack[A]): CallbackStackOps[A] =
-      new JSCallbackStackOps(stack)
-  }
-
-  private lazy val wasmFactory: CallbackStackFactory = new CallbackStackFactory {
-    type CallbackStack[A] = WasiCallbackStack[A]
-
-    @inline def of[A](cb: A => Unit): CallbackStack[A] =
+    @inline def of[A](cb: A => Unit): StackType[A] =
       new WasiCallbackStack(mutable.ArrayBuffer[A => Unit](cb))
 
-    @inline def ops[A](stack: CallbackStack[A]): CallbackStackOps[A] =
-      stack.asInstanceOf[CallbackStackOps[A]]
+    @inline def ops[A](stack: StackType[A]): CallbackStackOps[A] =
+      stack
   }
 
-  private[effect] val factory: CallbackStackFactory =
-    linkTimeIf(moduleKind == ModuleKind.WasmComponent)(wasmFactory)(jsFactory)
+  def JS: CallbackStackFactory = new CallbackStackFactory {
+    type StackType[A] = js.Array[A => Unit]
 
-  private[effect] type StackType[A] = factory.CallbackStack[A]
+    @inline def of[A](cb: A => Unit): StackType[A] =
+      new js.Array[A => Unit]()
+
+    @inline def ops[A](stack: StackType[A]): CallbackStackOps[A] =
+      new JSCallbackStackOps(stack)
+  }
+}
+
+private[effect] object CallbackStack {
+  type Handle[A] = Int
+
+  // This trait has to be defined here to support the implicit `ops` conversion
+  sealed trait CallbackStackFactory {
+    type StackType[A]
+    def of[A](cb: A => Unit): StackType[A]
+    implicit def ops[A](stack: StackType[A]): CallbackStackOps[A]
+  }
+
+  val callbackStackFactory: CallbackStackFactory =
+    linkTimeIf(moduleKind == ModuleKind.WasmComponent) {
+      CallbackStackFactory.Wasm
+    } {
+      CallbackStackFactory.JS
+    }
 
   @inline def of[A](cb: A => Unit): CallbackStack[A] =
-    factory.of(cb)
+    callbackStackFactory.of(cb)
 
   @inline implicit def ops[A](stack: CallbackStack[A]): CallbackStackOps[A] =
-    factory.ops(stack)
+    callbackStackFactory.ops(stack)
+}
+
+private[cats] trait CallbackStackPlatform {
+  type CallbackStack[A] = CallbackStack.callbackStackFactory.StackType[A]
 }
