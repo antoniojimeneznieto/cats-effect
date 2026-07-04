@@ -17,6 +17,7 @@
 package cats.effect
 
 trait DetectPlatform {
+  def isWasi: Boolean = false
   def isWSL: Boolean = System.getProperty("os.version").contains("-WSL")
   def isJS: Boolean = false
   def isJVM: Boolean = false
