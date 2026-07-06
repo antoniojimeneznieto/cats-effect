@@ -127,7 +127,7 @@ final class WasiPollingExecutor(pollEvery: Int, system: PollingSystem.WithPoller
 
   def nowMillis(): Long = {
     val now = wasi.clocks.wall_clock.now()
-    (now.seconds * 10000) + (now.nanoseconds / 1000000)
+    (now.seconds * 1000) + (now.nanoseconds / 1000000)
   }
 
   override def nowMicros(): Long = {
