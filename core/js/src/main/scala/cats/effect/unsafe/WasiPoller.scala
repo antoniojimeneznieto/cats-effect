@@ -27,7 +27,7 @@ final class WasiPoller(events: mutable.Queue[wasi.io.poll.Pollable]) {
 
         // We have to sort the array so that we don't change indexes
         // when processing the array later.
-        processed.sortInPlace().reverse
+        processed.sortInPlace()(Ordering.Int.reverse)
 
         /* We have to remove the alarm from events because it shouldn't outlive
          * this poll and fire off later. We also drop its index from `readyEvents`
